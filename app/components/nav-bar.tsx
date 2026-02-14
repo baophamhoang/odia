@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { APP_NAME } from "@/app/lib/constants";
 
 interface NavItem {
   href: string;
@@ -180,7 +181,7 @@ export function NavBar() {
         <div className="flex items-center gap-1 max-w-xl w-full px-4 justify-between">
           {/* Logo / app name */}
           <span className="text-accent font-bold text-lg tracking-tight">
-            Odia
+            {APP_NAME}
           </span>
 
           <div className="flex items-center gap-1">

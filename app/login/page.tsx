@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { APP_NAME } from "@/app/lib/constants";
 
 function GoogleIcon() {
   return (
@@ -51,10 +52,10 @@ function LoginCard() {
         {/* Wordmark */}
         <div className="mb-6 text-center">
           <h1 className="text-4xl font-bold tracking-tight text-foreground">
-            Odia
+            {APP_NAME}
           </h1>
           <p className="mt-2 text-sm text-foreground-secondary">
-            Your team&apos;s running photos
+            1Ohana Runclub&apos;s running photos
           </p>
         </div>
 
