@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 
 interface PhotoEntry {
   photoId: string;
@@ -68,27 +68,20 @@ export function PhotoUpload({ onPhotosReady, uploading = false }: PhotoUploadPro
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  const processFiles = useCallback(
-    (files: FileList | File[]) => {
-      const fileArray = Array.from(files).filter((f) =>
-        f.type.startsWith("image/")
-      );
-      if (fileArray.length === 0) return;
+  const processFiles = useCallback((files: FileList | File[]) => {
+    const fileArray = Array.from(files).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    if (fileArray.length === 0) return;
 
-      const newEntries: PhotoEntry[] = fileArray.map((file) => ({
-        photoId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-      }));
+    const newEntries: PhotoEntry[] = fileArray.map((file) => ({
+      photoId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
 
-      setPhotos((prev) => {
-        const updated = [...prev, ...newEntries];
-        onPhotosReady(updated);
-        return updated;
-      });
-    },
-    [onPhotosReady]
-  );
+    setPhotos((prev) => [...prev, ...newEntries]);
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -99,12 +92,12 @@ export function PhotoUpload({ onPhotosReady, uploading = false }: PhotoUploadPro
   };
 
   const handleRemove = (photoId: string) => {
-    setPhotos((prev) => {
-      const updated = prev.filter((p) => p.photoId !== photoId);
-      onPhotosReady(updated);
-      return updated;
-    });
+    setPhotos((prev) => prev.filter((p) => p.photoId !== photoId));
   };
+
+  useEffect(() => {
+    onPhotosReady(photos);
+  }, [photos, onPhotosReady]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();

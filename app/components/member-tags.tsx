@@ -18,6 +18,7 @@ function MemberChip({
   isSelected: boolean;
   onToggle: () => void;
 }) {
+  console.log('user :>> ', user);
   const initial = user.name ? user.name.charAt(0).toUpperCase() : "?";
 
   return (
