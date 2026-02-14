@@ -23,7 +23,9 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   const session = req.auth;
 
   if (!session) {
-    const loginUrl = new URL("/login", req.url);
+    const loginUrl = req.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.search = "";
     return NextResponse.redirect(loginUrl);
   }
 
