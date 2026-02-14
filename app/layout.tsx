@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Odia",
+  title: "Ohana's Ổ đĩa",
   description: "Your team's running photos",
 };
 
