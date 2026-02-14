@@ -1,6 +1,5 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { supabase } from "@/app/lib/db";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -17,6 +16,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return false;
       }
 
+      const { supabase } = await import("@/app/lib/db");
       const { data, error } = await supabase
         .from("allowed_emails")
         .select("id")
@@ -33,6 +33,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user, account, profile }) {
       // On initial sign in, account and profile are present
       if (account && profile && user.email) {
+        const { supabase } = await import("@/app/lib/db");
         const avatarUrl =
           (profile as { picture?: string }).picture ??
           (profile as { avatar_url?: string }).avatar_url ??
