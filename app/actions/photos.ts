@@ -59,6 +59,48 @@ export async function requestUploadUrls(
 }
 
 // ---------------------------------------------------------------------------
+// addPhotosToRun — any authenticated member can add photos to any run
+// ---------------------------------------------------------------------------
+
+export async function addPhotosToRun(
+  runId: string,
+  photoIds: string[]
+): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  if (photoIds.length === 0) return;
+
+  // Get current max display_order for the run
+  const { data: existing, error: existingError } = await supabase
+    .from("photos")
+    .select("display_order")
+    .eq("run_id", runId)
+    .order("display_order", { ascending: false })
+    .limit(1);
+
+  if (existingError) {
+    throw new Error(`Failed to query existing photos: ${existingError.message}`);
+  }
+
+  const maxOrder = existing?.[0]?.display_order ?? 0;
+
+  // Update each photo to link to the run with sequential display_order
+  await Promise.all(
+    photoIds.map(async (photoId, i) => {
+      const { error } = await supabase
+        .from("photos")
+        .update({ run_id: runId, display_order: maxOrder + i + 1 })
+        .eq("id", photoId);
+
+      if (error) {
+        throw new Error(`Failed to link photo ${photoId}: ${error.message}`);
+      }
+    })
+  );
+}
+
+// ---------------------------------------------------------------------------
 // deletePhoto
 // ---------------------------------------------------------------------------
 

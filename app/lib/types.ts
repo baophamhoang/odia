@@ -1,8 +1,11 @@
+export type UserRole = "admin" | "member";
+
 export interface User {
   id: string;
   email: string;
   name: string | null;
   avatar_url: string | null;
+  role: UserRole;
   created_at: string;
 }
 
@@ -42,6 +45,11 @@ export interface Photo {
   uploaded_by: string;
   created_at: string;
   url?: string; // signed URL, generated on demand
+  uploader?: {
+    id: string;
+    name: string | null;
+    avatar_url: string | null;
+  };
 }
 
 export interface AllowedEmail {

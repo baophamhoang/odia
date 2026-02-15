@@ -1,9 +1,9 @@
-"use server";
+'use server';
 
-import { auth } from "@/app/lib/auth";
-import { supabase } from "@/app/lib/db";
-import { getDownloadUrl } from "@/app/lib/r2";
-import type { User, Photo, Run, RunCard } from "@/app/lib/types";
+import { auth } from '@/app/lib/auth';
+import { supabase } from '@/app/lib/db';
+import { getDownloadUrl } from '@/app/lib/r2';
+import type { User, Photo, Run, RunCard } from '@/app/lib/types';
 
 // ---------------------------------------------------------------------------
 // getTeamMembers
@@ -11,9 +11,9 @@ import type { User, Photo, Run, RunCard } from "@/app/lib/types";
 
 export async function getTeamMembers(): Promise<User[]> {
   const { data, error } = await supabase
-    .from("users")
-    .select("*")
-    .order("name", { ascending: true });
+    .from('users')
+    .select('*')
+    .order('name', { ascending: true });
 
   if (error) {
     throw new Error(`Failed to fetch team members: ${error.message}`);
@@ -30,15 +30,16 @@ export async function getMyUploadedPhotos(): Promise<
   (Photo & { run: Run | null })[]
 > {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  console.log('session :>> ', session);
+  if (!session?.user?.id) throw new Error('Unauthorized');
 
   const userId = session.user.id;
 
   const { data: photos, error } = await supabase
-    .from("photos")
-    .select("*, runs(*)")
-    .eq("uploaded_by", userId)
-    .order("created_at", { ascending: false });
+    .from('photos')
+    .select('*, runs(*)')
+    .eq('uploaded_by', userId)
+    .order('created_at', { ascending: false });
 
   if (error) {
     throw new Error(`Failed to fetch uploaded photos: ${error.message}`);
@@ -57,7 +58,7 @@ export async function getMyUploadedPhotos(): Promise<
         url,
         run: runs ?? null,
       };
-    })
+    }),
   );
 
   return results;
@@ -69,19 +70,19 @@ export async function getMyUploadedPhotos(): Promise<
 
 export async function getMyTaggedRuns(): Promise<RunCard[]> {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new Error('Unauthorized');
 
   const userId = session.user.id;
 
   // Find run ids where current user is a participant
   const { data: participations, error: participationsError } = await supabase
-    .from("run_participants")
-    .select("run_id")
-    .eq("user_id", userId);
+    .from('run_participants')
+    .select('run_id')
+    .eq('user_id', userId);
 
   if (participationsError) {
     throw new Error(
-      `Failed to fetch participations: ${participationsError.message}`
+      `Failed to fetch participations: ${participationsError.message}`,
     );
   }
 
@@ -92,10 +93,10 @@ export async function getMyTaggedRuns(): Promise<RunCard[]> {
   }
 
   const { data: runs, error: runsError } = await supabase
-    .from("runs")
-    .select("*")
-    .in("id", runIds)
-    .order("run_date", { ascending: false });
+    .from('runs')
+    .select('*')
+    .in('id', runIds)
+    .order('run_date', { ascending: false });
 
   if (runsError) {
     throw new Error(`Failed to fetch tagged runs: ${runsError.message}`);
@@ -113,30 +114,35 @@ export async function getMyTaggedRuns(): Promise<RunCard[]> {
     { data: photos, error: photosError },
     { data: photoCounts, error: photoCountsError },
   ] = await Promise.all([
-    supabase.from("users").select("*").in("id", creatorIds),
+    supabase.from('users').select('*').in('id', creatorIds),
     supabase
-      .from("run_participants")
-      .select("run_id, users(*)")
-      .in("run_id", runIds),
+      .from('run_participants')
+      .select('run_id, users(*)')
+      .in('run_id', runIds),
     supabase
-      .from("photos")
-      .select("*")
-      .in("run_id", runIds)
-      .order("display_order", { ascending: true }),
-    supabase
-      .from("photos")
-      .select("run_id")
-      .in("run_id", runIds),
+      .from('photos')
+      .select('*')
+      .in('run_id', runIds)
+      .order('display_order', { ascending: true }),
+    supabase.from('photos').select('run_id').in('run_id', runIds),
   ]);
 
-  if (creatorsError) throw new Error(`Failed to fetch creators: ${creatorsError.message}`);
-  if (participantsError) throw new Error(`Failed to fetch participants: ${participantsError.message}`);
-  if (photosError) throw new Error(`Failed to fetch photos: ${photosError.message}`);
-  if (photoCountsError) throw new Error(`Failed to fetch photo counts: ${photoCountsError.message}`);
+  if (creatorsError)
+    throw new Error(`Failed to fetch creators: ${creatorsError.message}`);
+  if (participantsError)
+    throw new Error(
+      `Failed to fetch participants: ${participantsError.message}`,
+    );
+  if (photosError)
+    throw new Error(`Failed to fetch photos: ${photosError.message}`);
+  if (photoCountsError)
+    throw new Error(
+      `Failed to fetch photo counts: ${photoCountsError.message}`,
+    );
 
   // Index creators
   const creatorMap = new Map<string, User>(
-    (creators ?? []).map((u) => [u.id, u as User])
+    (creators ?? []).map((u) => [u.id, u as User]),
   );
 
   // Group participants by run
@@ -152,7 +158,10 @@ export async function getMyTaggedRuns(): Promise<RunCard[]> {
   const previewPhotosByRun = new Map<string, Photo[]>();
 
   for (const photo of photoCounts ?? []) {
-    photoCountByRun.set(photo.run_id, (photoCountByRun.get(photo.run_id) ?? 0) + 1);
+    photoCountByRun.set(
+      photo.run_id,
+      (photoCountByRun.get(photo.run_id) ?? 0) + 1,
+    );
   }
 
   for (const photo of photos ?? []) {
@@ -171,10 +180,10 @@ export async function getMyTaggedRuns(): Promise<RunCard[]> {
         runPhotos.map(async (p) => ({
           ...p,
           url: await getDownloadUrl(p.storage_path),
-        }))
+        })),
       );
       signedPreviewsByRun.set(runId, signed);
-    })
+    }),
   );
 
   return runs.map((run) => {

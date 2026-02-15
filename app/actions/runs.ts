@@ -158,7 +158,7 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
       .eq("run_id", runId),
     supabase
       .from("photos")
-      .select("*")
+      .select("*, uploader:uploaded_by(id, name, avatar_url)")
       .eq("run_id", runId)
       .order("display_order", { ascending: true }),
   ]);

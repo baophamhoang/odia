@@ -2,7 +2,7 @@ import { auth } from "@/app/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/favicon.ico"];
+const PUBLIC_PATHS = ["/", "/login", "/favicon.ico"];
 const PUBLIC_PREFIXES = ["/api/auth/", "/_next/"];
 
 function isPublicPath(pathname: string): boolean {
