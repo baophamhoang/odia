@@ -5,6 +5,10 @@ import type { UserRole } from '@/app/lib/types';
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   trustHost: true,
+  pages: {
+    signIn: '/login',
+    error: '/login',
+  },
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -14,7 +18,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async signIn({ user }) {
       const email = user.email;
-      if (!email) return false;
+      if (!email) return '/login?error=not_whitelisted';
 
       const { supabase } = await import('@/app/lib/db');
       const { data, error } = await supabase
@@ -23,7 +27,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         .eq('email', email)
         .single();
 
-      if (error || !data) return false;
+      if (error || !data) return '/login?error=not_whitelisted';
       return true;
     },
 

@@ -10,7 +10,9 @@ function LoginCard() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
   const isAccessDenied =
-    error === "AccessDenied" || error === "access_denied";
+    error === "AccessDenied" ||
+    error === "access_denied" ||
+    error === "not_whitelisted";
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -45,7 +47,7 @@ function LoginCard() {
               className="mb-6 rounded-xl border-l-4 border-l-destructive border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
               role="alert"
             >
-              Your email is not on the team list. Contact your admin.
+              We don&apos;t recognize your email. Please contact the leader to be added to the whitelist.
             </motion.div>
           )}
 
