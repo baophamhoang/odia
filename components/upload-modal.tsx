@@ -4,9 +4,10 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { X, Upload, Loader2, MapPin, Hash, Plus, Images } from "lucide-react";
+import { X, Upload, MapPin, Hash, Plus, Images } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { mutate as mutateCache } from "swr";
 import {
   Dialog,
   DialogContent,
@@ -186,10 +187,15 @@ export function UploadModal({
 
       if (mode === "add-to-existing" && selectedRunId) {
         await addPhotosToRun(selectedRunId, photoIds);
+        await Promise.all([
+          mutateCache(`/api/runs/${selectedRunId}`),
+          mutateCache("/api/runs?page=1"),
+          mutateCache("/api/users/me/photos"),
+          mutateCache("/api/users/me/tagged"),
+        ]);
         toast.success(`Added ${photoIds.length} photo${photoIds.length !== 1 ? "s" : ""} to run!`);
         resetForm();
         onOpenChange(false);
-        router.refresh();
       } else {
         if (!date) return;
         const hashtagList = hashtags
@@ -206,6 +212,23 @@ export function UploadModal({
           participant_ids: selectedMembers,
           photo_ids: photoIds,
         });
+
+        await Promise.allSettled([
+          mutateCache(
+            `/api/runs/${id}`,
+            fetch(`/api/runs/${id}`).then(async (res) => {
+              if (!res.ok) {
+                throw new Error("Failed to load new run");
+              }
+              return res.json();
+            })
+          ),
+          mutateCache("/api/runs?page=1"),
+          mutateCache("/api/users/me/photos"),
+          mutateCache("/api/users/me/tagged"),
+        ]);
+
+        router.prefetch(`/runs/${id}`);
 
         toast.success("Run uploaded successfully!");
         resetForm();

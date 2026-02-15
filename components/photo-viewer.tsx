@@ -3,7 +3,8 @@
 import { useState, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence, type PanInfo } from "motion/react";
-import { X, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Download, ChevronLeft, ChevronRight, Trash2, Loader2 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import type { Photo } from "@/app/lib/types";
 
@@ -11,16 +12,27 @@ interface PhotoViewerProps {
   photos: Photo[];
   initialIndex: number;
   onClose: () => void;
+  canDeletePhoto?: (photo: Photo) => boolean;
+  onDeletePhoto?: (photo: Photo) => Promise<void>;
 }
 
 export function PhotoViewer({
   photos,
   initialIndex,
   onClose,
+  canDeletePhoto,
+  onDeletePhoto,
 }: PhotoViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [direction, setDirection] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const photo = photos[currentIndex];
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const goNext = useCallback(() => {
     setDirection(1);
@@ -54,6 +66,15 @@ export function PhotoViewer({
     };
   }, [onClose, goNext, goPrev]);
 
+  useEffect(() => {
+    if (photos.length === 0) {
+      onClose();
+      return;
+    }
+
+    setCurrentIndex((prev) => Math.min(prev, photos.length - 1));
+  }, [photos.length, onClose]);
+
   async function handleDownload() {
     if (!photo?.url) return;
     const response = await fetch(photo.url);
@@ -68,19 +89,30 @@ export function PhotoViewer({
     URL.revokeObjectURL(url);
   }
 
+  async function handleDelete() {
+    if (!photo || !onDeletePhoto || !canDeletePhoto?.(photo)) return;
+    setIsDeleting(true);
+    try {
+      await onDeletePhoto(photo);
+      setShowDeleteConfirm(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   const variants = {
     enter: (d: number) => ({ opacity: 0, x: d * 60, scale: 0.96 }),
     center: { opacity: 1, x: 0, scale: 1 },
     exit: (d: number) => ({ opacity: 0, x: d * -60, scale: 0.96 }),
   };
 
-  return (
+  const viewer = (
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden"
+        className="fixed inset-0 z-999 flex items-center justify-center overflow-hidden"
         onClick={onClose}
       >
         {/* Ambient glow background */}
@@ -97,14 +129,14 @@ export function PhotoViewer({
         <div className="absolute inset-0 bg-black/80" />
 
         {/* Top bar */}
-        <div className="absolute top-0 left-0 right-0 z-10 px-5 py-4 bg-gradient-to-b from-black/60 to-transparent">
+        <div className="absolute top-0 left-0 right-0 z-10 px-5 py-4 bg-linear-to-b from-black/60 to-transparent">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[11px] font-semibold text-white/40 uppercase tracking-widest">
                 {currentIndex + 1} of {photos.length}
               </p>
               {photo?.file_name && (
-                <p className="text-sm font-medium text-white/60 mt-0.5 truncate max-w-[200px]">
+                <p className="text-sm font-medium text-white/60 mt-0.5 truncate max-w-50">
                   {photo.file_name}
                 </p>
               )}
@@ -120,9 +152,29 @@ export function PhotoViewer({
                 <Download className="h-4 w-4" />
                 <span className="hidden sm:inline">Save</span>
               </button>
+              {photo && canDeletePhoto?.(photo) && onDeletePhoto && (
+                <button
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-white/80 hover:text-white hover:bg-red-500/25 transition-colors text-sm disabled:opacity-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDeleteConfirm(true);
+                  }}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">Delete</span>
+                </button>
+              )}
               <button
                 className="flex h-9 w-9 items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-                onClick={onClose}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -237,7 +289,61 @@ export function PhotoViewer({
             ))}
           </motion.div>
         )}
+
+        {/* Delete confirm modal */}
+        <AnimatePresence>
+          {showDeleteConfirm && (
+            <motion.div
+              className="absolute inset-0 z-20 flex items-center justify-center bg-black/55"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isDeleting) setShowDeleteConfirm(false);
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                className="w-[92vw] max-w-sm rounded-2xl border border-white/15 bg-zinc-950/95 p-5 text-white shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-base font-semibold">Delete photo?</h3>
+                <p className="mt-1.5 text-sm text-white/70">
+                  This photo will be removed permanently. This action cannot be undone.
+                </p>
+
+                <div className="mt-5 flex items-center justify-end gap-2">
+                  <button
+                    className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 hover:bg-white/10 disabled:opacity-50"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50"
+                    onClick={() => {
+                      void handleDelete();
+                    }}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Delete
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </AnimatePresence>
   );
+
+  if (!isMounted) return null;
+
+  return createPortal(viewer, document.body);
 }

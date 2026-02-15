@@ -2,7 +2,7 @@
 
 import { auth } from '@/app/lib/auth';
 import { supabase } from '@/app/lib/db';
-import { getDownloadUrl } from '@/app/lib/r2';
+import { getDownloadUrl, objectExists } from '@/app/lib/r2';
 import type { User, Photo, Run, RunCard } from '@/app/lib/types';
 
 // ---------------------------------------------------------------------------
@@ -30,7 +30,6 @@ export async function getMyUploadedPhotos(): Promise<
   (Photo & { run: Run | null })[]
 > {
   const session = await auth();
-  console.log('session :>> ', session);
   if (!session?.user?.id) throw new Error('Unauthorized');
 
   const userId = session.user.id;
@@ -51,6 +50,17 @@ export async function getMyUploadedPhotos(): Promise<
         runs: Run | null;
       };
 
+      // If this photo points to a deleted run (stale/orphaned row), hide it.
+      if (photoFields.run_id && !runs) {
+        return null;
+      }
+
+      // If object no longer exists in storage, hide it to avoid broken images.
+      const exists = await objectExists(photoFields.storage_path);
+      if (!exists) {
+        return null;
+      }
+
       const url = await getDownloadUrl(photoFields.storage_path);
 
       return {
@@ -61,7 +71,7 @@ export async function getMyUploadedPhotos(): Promise<
     }),
   );
 
-  return results;
+  return results.filter(Boolean) as (Photo & { run: Run | null })[];
 }
 
 // ---------------------------------------------------------------------------

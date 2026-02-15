@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -54,4 +55,17 @@ export async function deleteObject(storagePath: string): Promise<void> {
     Key: storagePath,
   });
   await r2.send(command);
+}
+
+export async function objectExists(storagePath: string): Promise<boolean> {
+  try {
+    const command = new HeadObjectCommand({
+      Bucket: BUCKET,
+      Key: storagePath,
+    });
+    await r2.send(command);
+    return true;
+  } catch {
+    return false;
+  }
 }

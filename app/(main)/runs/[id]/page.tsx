@@ -12,7 +12,7 @@ export default function RunPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { data: run, isLoading, mutate } = useRun(id);
+  const { data: run, isLoading, isValidating, mutate } = useRun(id);
   const { data: session } = useSession();
 
   if (isLoading || !run) {
@@ -22,5 +22,14 @@ export default function RunPage({
   const isOwner = session?.user?.id === run.created_by;
   const isAdmin = session?.user?.role === "admin";
 
-  return <RunDetail run={run} isOwner={isOwner} isAdmin={isAdmin} mutate={mutate} />;
+  return (
+    <RunDetail
+      run={run}
+      isOwner={isOwner}
+      isAdmin={isAdmin}
+      mutate={mutate}
+      isRefreshing={isValidating && !isLoading}
+      currentUserId={session?.user?.id}
+    />
+  );
 }

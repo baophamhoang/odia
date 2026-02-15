@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { format, parseISO } from "date-fns";
-import { Upload, MapPin, Camera, ArrowRight } from "lucide-react";
+import { Upload, MapPin, Camera, ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { RunCardGridSkeleton } from "@/components/skeleton";
@@ -14,9 +14,10 @@ import type { RunCard } from "@/app/lib/types";
 interface VaultViewProps {
   runs: RunCard[];
   isLoading?: boolean;
+  isRefreshing?: boolean;
 }
 
-export function VaultView({ runs, isLoading }: VaultViewProps) {
+export function VaultView({ runs, isLoading, isRefreshing }: VaultViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -42,6 +43,13 @@ export function VaultView({ runs, isLoading }: VaultViewProps) {
 
   return (
     <div>
+      {isRefreshing && !isLoading && (
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Refreshing…
+        </div>
+      )}
+
       {/* Hero drop zone */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

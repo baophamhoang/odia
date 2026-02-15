@@ -6,12 +6,23 @@ import { motion } from "motion/react";
 import type { Photo } from "@/app/lib/types";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Camera } from "lucide-react";
+import { Camera, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface PhotoGridProps {
   photos: Photo[];
   columns?: 2 | 3 | 4;
   grouped?: boolean;
+  canDeletePhoto?: (photo: Photo) => boolean;
+  onDeletePhoto?: (photo: Photo) => Promise<void>;
 }
 
 /** Group photos by uploader, preserving order of first appearance. */
@@ -37,8 +48,16 @@ function groupByUploader(photos: Photo[]) {
   return groups;
 }
 
-export function PhotoGrid({ photos, columns = 3, grouped = false }: PhotoGridProps) {
+export function PhotoGrid({
+  photos,
+  columns = 3,
+  grouped = false,
+  canDeletePhoto,
+  onDeletePhoto,
+}: PhotoGridProps) {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Photo | null>(null);
+  const [isDeletingFromGrid, setIsDeletingFromGrid] = useState(false);
 
   // Build a flat list for the viewer (so arrow keys cycle through all photos)
   const allPhotos = photos;
@@ -106,6 +125,8 @@ export function PhotoGrid({ photos, columns = 3, grouped = false }: PhotoGridPro
                   columns={columns}
                   flatOffset={startOffset}
                   onSelect={setViewerIndex}
+                  canDeletePhoto={canDeletePhoto}
+                  onRequestDelete={setPendingDelete}
                 />
               </div>
             );
@@ -117,8 +138,51 @@ export function PhotoGrid({ photos, columns = 3, grouped = false }: PhotoGridPro
             photos={allPhotos}
             initialIndex={viewerIndex}
             onClose={() => setViewerIndex(null)}
+            canDeletePhoto={canDeletePhoto}
+            onDeletePhoto={onDeletePhoto}
           />
         )}
+
+        <Dialog
+          open={!!pendingDelete}
+          onOpenChange={(open) => {
+            if (!open && !isDeletingFromGrid) setPendingDelete(null);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete photo?</DialogTitle>
+              <DialogDescription>
+                This photo will be removed permanently. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setPendingDelete(null)}
+                disabled={isDeletingFromGrid}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!pendingDelete || !onDeletePhoto) return;
+                  setIsDeletingFromGrid(true);
+                  try {
+                    await onDeletePhoto(pendingDelete);
+                    setPendingDelete(null);
+                  } finally {
+                    setIsDeletingFromGrid(false);
+                  }
+                }}
+                disabled={isDeletingFromGrid}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </>
     );
   }
@@ -251,6 +315,8 @@ export function PhotoGrid({ photos, columns = 3, grouped = false }: PhotoGridPro
           photos={photos}
           initialIndex={viewerIndex}
           onClose={() => setViewerIndex(null)}
+          canDeletePhoto={canDeletePhoto}
+          onDeletePhoto={onDeletePhoto}
         />
       )}
     </>
@@ -263,16 +329,20 @@ function SimpleGrid({
   columns,
   flatOffset,
   onSelect,
+  canDeletePhoto,
+  onRequestDelete,
 }: {
   photos: Photo[];
   columns: 2 | 3 | 4;
   flatOffset: number;
   onSelect: (index: number) => void;
+  canDeletePhoto?: (photo: Photo) => boolean;
+  onRequestDelete?: (photo: Photo) => void;
 }) {
   return (
     <div className={`grid ${columns === 2 ? "grid-cols-2" : columns === 4 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"} gap-1.5 rounded-2xl overflow-hidden`}>
       {photos.map((photo, index) => (
-        <motion.button
+        <motion.div
           key={photo.id}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -281,20 +351,36 @@ function SimpleGrid({
             duration: 0.4,
             ease: [0.22, 1, 0.36, 1],
           }}
-          onClick={() => onSelect(flatOffset + index)}
-          className="relative aspect-square overflow-hidden bg-muted/10 cursor-pointer group rounded-lg"
+          className="relative aspect-square overflow-hidden bg-muted/10 group rounded-lg"
           whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
         >
-          <Image
-            src={photo.url ?? ""}
-            alt={photo.file_name ?? "Photo"}
-            fill
-            className="object-cover transition-all duration-500 group-hover:brightness-110 group-hover:scale-[1.03]"
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
-        </motion.button>
+          <button
+            onClick={() => onSelect(flatOffset + index)}
+            className="absolute inset-0 cursor-pointer"
+          >
+            <Image
+              src={photo.url ?? ""}
+              alt={photo.file_name ?? "Photo"}
+              fill
+              className="object-cover transition-all duration-500 group-hover:brightness-110 group-hover:scale-[1.03]"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+          </button>
+
+          {canDeletePhoto?.(photo) && onRequestDelete && (
+            <button
+              className="absolute top-1.5 right-1.5 z-10 h-7 w-7 rounded-full bg-black/65 text-white/90 flex items-center justify-center hover:bg-red-600 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestDelete(photo);
+              }}
+              aria-label="Delete photo"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </motion.div>
       ))}
     </div>
   );

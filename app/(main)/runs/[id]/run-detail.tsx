@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -14,9 +14,11 @@ import {
   Loader2,
   Plus,
   Camera,
+  ChevronsDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { mutate as mutateCache } from "swr";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -36,6 +38,7 @@ import {
 } from "@/components/ui/dialog";
 import { PhotoGrid } from "@/components/photo-grid";
 import { UploadModal } from "@/components/upload-modal";
+import { deletePhoto } from "@/app/actions/photos";
 import { deleteRun } from "@/app/actions/runs";
 import { useTeamMembers } from "@/app/lib/api";
 import type { RunWithDetails } from "@/app/lib/types";
@@ -46,6 +49,8 @@ interface RunDetailProps {
   isOwner: boolean;
   isAdmin: boolean;
   mutate?: KeyedMutator<RunWithDetails>;
+  isRefreshing?: boolean;
+  currentUserId?: string;
 }
 
 const hashtagColors = [
@@ -56,12 +61,20 @@ const hashtagColors = [
   "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
 ];
 
-export function RunDetail({ run, isOwner, isAdmin, mutate }: RunDetailProps) {
+export function RunDetail({
+  run,
+  isOwner,
+  isAdmin,
+  mutate,
+  isRefreshing,
+  currentUserId,
+}: RunDetailProps) {
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showEndNudge, setShowEndNudge] = useState(false);
   const { data: members } = useTeamMembers();
 
   const handleUploadClose = useCallback((open: boolean) => {
@@ -75,6 +88,11 @@ export function RunDetail({ run, isOwner, isAdmin, mutate }: RunDetailProps) {
     setIsDeleting(true);
     try {
       await deleteRun(run.id);
+      await Promise.all([
+        mutateCache("/api/runs?page=1"),
+        mutateCache("/api/users/me/photos"),
+        mutateCache("/api/users/me/tagged"),
+      ]);
       toast.success("Run deleted");
       router.push("/vault");
     } catch (error) {
@@ -114,6 +132,93 @@ export function RunDetail({ run, isOwner, isAdmin, mutate }: RunDetailProps) {
       setIsDownloading(false);
     }
   }
+
+  const canDeletePhoto = useCallback(
+    (photo: { uploaded_by: string }) => {
+      if (!currentUserId) return false;
+      return isOwner || isAdmin || photo.uploaded_by === currentUserId;
+    },
+    [currentUserId, isAdmin, isOwner]
+  );
+
+  const handleDeletePhoto = useCallback(
+    async (photo: { id: string; uploaded_by: string }) => {
+      if (!canDeletePhoto(photo)) {
+        toast.error("You can only delete your own photos");
+        return;
+      }
+
+      const previous = run.photos;
+
+      mutate?.(
+        (current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            photos: current.photos.filter((p) => p.id !== photo.id),
+          };
+        },
+        false
+      );
+
+      try {
+        await deletePhoto(photo.id);
+        await Promise.all([
+          mutate?.(),
+          mutateCache("/api/runs?page=1"),
+          mutateCache("/api/users/me/photos"),
+          mutateCache("/api/users/me/tagged"),
+        ]);
+        toast.success("Photo deleted");
+      } catch (error) {
+        mutate?.({ ...run, photos: previous }, false);
+        toast.error(
+          error instanceof Error ? error.message : "Failed to delete photo"
+        );
+      }
+    },
+    [canDeletePhoto, mutate, run]
+  );
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let touchStartY: number | null = null;
+
+    const triggerNudge = () => {
+      setShowEndNudge(true);
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => setShowEndNudge(false), 500);
+    };
+
+    const atBottom = () =>
+      window.innerHeight + window.scrollY >= document.body.scrollHeight - 2;
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY > 0 && atBottom()) triggerNudge();
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0]?.clientY ?? null;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchStartY == null) return;
+      const currentY = e.touches[0]?.clientY ?? touchStartY;
+      // Swipe up at bottom means trying to go further down.
+      if (touchStartY - currentY > 8 && atBottom()) triggerNudge();
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+
+    return () => {
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
 
   const canManage = isOwner || isAdmin;
   const heroPhoto = run.photos[0];
@@ -171,6 +276,13 @@ export function RunDetail({ run, isOwner, isAdmin, mutate }: RunDetailProps) {
         </Button>
 
         <div className="flex items-center gap-2">
+          {isRefreshing && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Refreshing…
+            </span>
+          )}
+
           {/* Add Photos button — any member can add */}
           <Button
             variant="outline"
@@ -306,7 +418,28 @@ export function RunDetail({ run, isOwner, isAdmin, mutate }: RunDetailProps) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       >
-        <PhotoGrid photos={run.photos} columns={3} grouped />
+        <PhotoGrid
+          photos={run.photos}
+          columns={3}
+          grouped
+          canDeletePhoto={canDeletePhoto}
+          onDeletePhoto={handleDeletePhoto}
+        />
+      </motion.div>
+
+      {/* End of list marker */}
+      <motion.div
+        className="mt-8 mb-2 flex flex-col items-center gap-1 text-muted-foreground/55"
+        animate={showEndNudge ? { scale: 1.04, y: -3 } : { scale: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 420, damping: 28 }}
+      >
+        <span className="text-xs uppercase tracking-[0.2em]">No more photos</span>
+        <motion.div
+          animate={showEndNudge ? { y: [0, -4, 0] } : { y: [0, 2, 0] }}
+          transition={{ duration: 0.6, repeat: showEndNudge ? 1 : Infinity, repeatDelay: 1.2 }}
+        >
+          <ChevronsDown className="h-4 w-4" />
+        </motion.div>
       </motion.div>
 
       {/* Delete dialog */}
