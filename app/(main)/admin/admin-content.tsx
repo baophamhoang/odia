@@ -26,8 +26,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   addAllowedEmail,
+  setWhitelistEnabled,
   removeAllowedEmail,
   updateUserRole,
+  type AccessControlSettings,
   type AllowedEmailWithUser,
 } from "@/app/actions/admin";
 import { AdminSkeleton } from "@/components/skeleton";
@@ -36,16 +38,47 @@ import type { KeyedMutator } from "swr";
 
 interface AdminContentProps {
   emails: AllowedEmailWithUser[];
+  accessControl: AccessControlSettings;
   isLoading?: boolean;
   mutate?: KeyedMutator<AllowedEmailWithUser[]>;
+  mutateAccessControl?: KeyedMutator<AccessControlSettings>;
 }
 
-export function AdminContent({ emails, isLoading, mutate }: AdminContentProps) {
+export function AdminContent({
+  emails,
+  accessControl,
+  isLoading,
+  mutate,
+  mutateAccessControl,
+}: AdminContentProps) {
   const [newEmail, setNewEmail] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [isTogglingWhitelist, setIsTogglingWhitelist] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AllowedEmailWithUser | null>(
     null
   );
+
+  async function handleToggleWhitelist() {
+    setIsTogglingWhitelist(true);
+    try {
+      const nextEnabled = !accessControl.whitelistEnabled;
+      await setWhitelistEnabled(nextEnabled);
+      toast.success(
+        nextEnabled
+          ? "Whitelist is ON. Only invited emails can sign in."
+          : "Whitelist is OFF. Any Google account can sign in."
+      );
+      mutateAccessControl?.();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update access setting"
+      );
+    } finally {
+      setIsTogglingWhitelist(false);
+    }
+  }
 
   async function handleAdd() {
     if (!newEmail.trim()) return;
@@ -103,6 +136,44 @@ export function AdminContent({ emails, isLoading, mutate }: AdminContentProps) {
         <p className="text-sm text-muted-foreground mt-1">
           Manage who can access the vault
         </p>
+      </div>
+
+      {/* Access control */}
+      <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-5 mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-medium">Whitelist gate</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              {accessControl.whitelistEnabled
+                ? "Only emails in the team whitelist can sign in."
+                : "Anyone with Google SSO can sign in and upload photos."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={accessControl.whitelistEnabled ? "secondary" : "outline"}
+              className={
+                accessControl.whitelistEnabled
+                  ? "bg-amber-500/10 text-amber-600 border-0"
+                  : "text-emerald-600 border-emerald-600/30"
+              }
+            >
+              {accessControl.whitelistEnabled ? "ON" : "OFF"}
+            </Badge>
+            <Button
+              variant={accessControl.whitelistEnabled ? "outline" : "default"}
+              onClick={handleToggleWhitelist}
+              disabled={isTogglingWhitelist}
+            >
+              {isTogglingWhitelist && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              {accessControl.whitelistEnabled
+                ? "Turn off whitelist"
+                : "Turn on whitelist"}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Add email form */}

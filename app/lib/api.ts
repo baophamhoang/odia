@@ -9,7 +9,10 @@ import type {
   FolderWithMeta,
   BreadcrumbItem,
 } from "@/app/lib/types";
-import type { AllowedEmailWithUser } from "@/app/actions/admin";
+import type {
+  AllowedEmailWithUser,
+  AccessControlSettings,
+} from "@/app/actions/admin";
 
 async function fetcher<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -91,6 +94,14 @@ export function useFolderChildren(folderId: string | null) {
 export function useAdminEmails() {
   return useSWR<AllowedEmailWithUser[]>(
     "/api/admin/emails",
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+}
+
+export function useAdminAccessControl() {
+  return useSWR<AccessControlSettings>(
+    "/api/admin/access-control",
     fetcher,
     { revalidateOnFocus: false }
   );

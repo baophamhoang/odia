@@ -2,6 +2,7 @@
 
 import { auth } from "@/app/lib/auth";
 import { supabase } from "@/app/lib/db";
+import { WHITELIST_BYPASS_EMAIL } from "@/app/lib/constants";
 import type { AllowedEmail, User, UserRole } from "@/app/lib/types";
 
 async function requireAdminSession() {
@@ -19,6 +20,10 @@ export interface AllowedEmailWithUser extends AllowedEmail {
   user: Pick<User, "id" | "name" | "avatar_url" | "role"> | null;
 }
 
+export interface AccessControlSettings {
+  whitelistEnabled: boolean;
+}
+
 export async function getAllowedEmails(): Promise<AllowedEmailWithUser[]> {
   await requireAdminSession();
 
@@ -28,9 +33,13 @@ export async function getAllowedEmails(): Promise<AllowedEmailWithUser[]> {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Failed to fetch allowed emails: ${error.message}`);
-  if (!emails || emails.length === 0) return [];
 
-  const emailAddresses = emails.map((e) => e.email);
+  const visibleEmails = (emails ?? []).filter(
+    (e) => e.email !== WHITELIST_BYPASS_EMAIL
+  );
+  if (visibleEmails.length === 0) return [];
+
+  const emailAddresses = visibleEmails.map((e) => e.email);
   const { data: users, error: usersError } = await supabase
     .from("users")
     .select("id, email, name, avatar_url, role")
@@ -45,10 +54,67 @@ export async function getAllowedEmails(): Promise<AllowedEmailWithUser[]> {
     ])
   );
 
-  return emails.map((email) => ({
+  return visibleEmails.map((email) => ({
     ...(email as AllowedEmail),
     user: usersByEmail.get(email.email) ?? null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// getAccessControlSettings
+// ---------------------------------------------------------------------------
+
+export async function getAccessControlSettings(): Promise<AccessControlSettings> {
+  await requireAdminSession();
+
+  const { data, error } = await supabase
+    .from("allowed_emails")
+    .select("id")
+    .eq("email", WHITELIST_BYPASS_EMAIL)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch access settings: ${error.message}`);
+  }
+
+  return {
+    // Marker present => whitelist disabled
+    whitelistEnabled: !data,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// setWhitelistEnabled
+// ---------------------------------------------------------------------------
+
+export async function setWhitelistEnabled(enabled: boolean): Promise<void> {
+  await requireAdminSession();
+
+  if (enabled) {
+    const { error } = await supabase
+      .from("allowed_emails")
+      .delete()
+      .eq("email", WHITELIST_BYPASS_EMAIL);
+    if (error) {
+      throw new Error(`Failed to update access settings: ${error.message}`);
+    }
+    return;
+  }
+
+  const { error } = await supabase.from("allowed_emails").upsert(
+    {
+      email: WHITELIST_BYPASS_EMAIL,
+      added_by: null,
+    },
+    {
+      onConflict: "email",
+      ignoreDuplicates: false,
+    }
+  );
+
+  if (error) {
+    throw new Error(`Failed to update access settings: ${error.message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -57,9 +123,14 @@ export async function getAllowedEmails(): Promise<AllowedEmailWithUser[]> {
 
 export async function addAllowedEmail(email: string): Promise<void> {
   const session = await requireAdminSession();
+  const normalizedEmail = email.toLowerCase().trim();
+
+  if (normalizedEmail === WHITELIST_BYPASS_EMAIL) {
+    throw new Error("This email is reserved for system access control");
+  }
 
   const { error } = await supabase.from("allowed_emails").insert({
-    email: email.toLowerCase().trim(),
+    email: normalizedEmail,
     added_by: session.user.id,
   });
 

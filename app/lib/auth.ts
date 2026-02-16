@@ -1,5 +1,6 @@
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
+import { WHITELIST_BYPASS_EMAIL } from '@/app/lib/constants';
 import type { UserRole } from '@/app/lib/types';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -19,15 +20,28 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async signIn({ user }) {
       const email = user.email;
       if (!email) return '/login?error=not_whitelisted';
+      const normalizedEmail = email.toLowerCase().trim();
 
       const { supabase } = await import('@/app/lib/db');
-      const { data, error } = await supabase
-        .from('allowed_emails')
-        .select('id')
-        .eq('email', email)
-        .single();
 
-      if (error || !data) return '/login?error=not_whitelisted';
+      // Access-control gate:
+      // - allow if sentinel marker exists (whitelist OFF)
+      // - allow if user email is explicitly whitelisted
+      const { data: allowedRows, error: allowedRowsError } = await supabase
+        .from('allowed_emails')
+        .select('email')
+        .in('email', [normalizedEmail, WHITELIST_BYPASS_EMAIL]);
+
+      if (allowedRowsError) return '/login?error=not_whitelisted';
+
+      const hasBypass = (allowedRows ?? []).some(
+        (row) => row.email === WHITELIST_BYPASS_EMAIL,
+      );
+      const isWhitelisted = (allowedRows ?? []).some(
+        (row) => row.email === normalizedEmail,
+      );
+
+      if (!hasBypass && !isWhitelisted) return '/login?error=not_whitelisted';
       return true;
     },
 
