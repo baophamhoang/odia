@@ -1,10 +1,11 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useRuns } from "@/app/lib/api";
 import { VaultView } from "./vault-view";
 
-export default function VaultPage() {
+function VaultPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get("tab") ?? "recent";
@@ -24,5 +25,23 @@ export default function VaultPage() {
       activeTab={tab}
       onTabChange={onTabChange}
     />
+  );
+}
+
+export default function VaultPage() {
+  return (
+    <Suspense
+      fallback={
+        <VaultView
+          runs={[]}
+          isLoading
+          isRefreshing={false}
+          activeTab="recent"
+          onTabChange={() => {}}
+        />
+      }
+    >
+      <VaultPageContent />
+    </Suspense>
   );
 }
