@@ -3,6 +3,12 @@
 import { auth } from "@/app/lib/auth";
 import { supabase } from "@/app/lib/db";
 import { getDownloadUrl, deleteObject } from "@/app/lib/r2";
+import {
+  getRootFolder,
+  createRunFolder,
+  deleteRunFolder,
+  linkPhotosToRunFolder,
+} from "@/app/actions/vault";
 import type { RunCard, RunWithDetails, Photo, User } from "@/app/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -244,6 +250,25 @@ export async function createRun(data: {
 
   await Promise.all(operations);
 
+  // Auto-create folder for this run (flat at root: run_YYYY-MM-DD)
+  try {
+    const root = await getRootFolder();
+    const runDate = new Date(data.run_date);
+    const folderId = await createRunFolder(
+      root.id,
+      runId,
+      data.title ?? null,
+      runDate,
+      userId
+    );
+    if (data.photo_ids.length > 0) {
+      await linkPhotosToRunFolder(runId, folderId);
+    }
+  } catch (e) {
+    // Folder creation is non-blocking — run still created successfully
+    console.error("Failed to create run folder:", e);
+  }
+
   return { id: runId };
 }
 
@@ -365,6 +390,13 @@ export async function deleteRun(runId: string): Promise<void> {
     await Promise.all(
       photos.map((photo) => deleteObject(photo.storage_path))
     );
+  }
+
+  // Delete the run folder first (before run row cascade)
+  try {
+    await deleteRunFolder(runId);
+  } catch (e) {
+    console.error("Failed to delete run folder:", e);
   }
 
   // Delete the run — photos and participants should cascade via DB constraints

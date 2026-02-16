@@ -52,6 +52,50 @@ export interface Photo {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Folders (vault directory)
+// ---------------------------------------------------------------------------
+
+export type FolderType = "root" | "run" | "custom";
+
+export interface FolderTreeNode {
+  id: string;
+  name: string;
+  folder_type: FolderType;
+  run_id: string | null;
+  children?: FolderTreeNode[]; // undefined = not loaded, [] = leaf
+}
+
+export interface Folder {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  slug: string;
+  folder_type: FolderType;
+  run_id: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FolderWithMeta extends Folder {
+  item_count: number;
+  preview_url?: string;
+}
+
+export interface BreadcrumbItem {
+  id: string;
+  name: string;
+  slug: string;
+  folder_type: FolderType;
+}
+
+export interface FolderContents {
+  folder: Folder;
+  subfolders: FolderWithMeta[];
+  photos: Photo[];
+}
+
 export interface AllowedEmail {
   id: string;
   email: string;

@@ -85,12 +85,23 @@ export async function addPhotosToRun(
 
   const maxOrder = existing?.[0]?.display_order ?? 0;
 
-  // Update each photo to link to the run with sequential display_order
+  // Find the run's folder so we can set folder_id too
+  const { getRunFolderId } = await import("@/app/actions/vault");
+  const folderId = await getRunFolderId(runId);
+
+  // Update each photo to link to the run (and folder) with sequential display_order
   await Promise.all(
     photoIds.map(async (photoId, i) => {
+      const update: Record<string, unknown> = {
+        run_id: runId,
+        display_order: maxOrder + i + 1,
+      };
+      if (folderId) {
+        update.folder_id = folderId;
+      }
       const { error } = await supabase
         .from("photos")
-        .update({ run_id: runId, display_order: maxOrder + i + 1 })
+        .update(update)
         .eq("id", photoId);
 
       if (error) {

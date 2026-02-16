@@ -1,5 +1,14 @@
 import useSWR from "swr";
-import type { RunCard, RunWithDetails, User, Photo, Run } from "@/app/lib/types";
+import type {
+  RunCard,
+  RunWithDetails,
+  User,
+  Photo,
+  Run,
+  FolderContents,
+  FolderWithMeta,
+  BreadcrumbItem,
+} from "@/app/lib/types";
 import type { AllowedEmailWithUser } from "@/app/actions/admin";
 
 async function fetcher<T>(url: string): Promise<T> {
@@ -55,6 +64,27 @@ export function useMyTaggedRuns() {
     "/api/users/me/tagged",
     fetcher,
     { revalidateOnFocus: false }
+  );
+}
+
+export function useFolderContents(folderId: string | null) {
+  return useSWR<FolderContents>(
+    folderId ? `/api/vault/folders/${folderId}` : "/api/vault/folders",
+    fetcher
+  );
+}
+
+export function useBreadcrumbs(folderId: string | null) {
+  return useSWR<BreadcrumbItem[]>(
+    folderId ? `/api/vault/folders/${folderId}/breadcrumbs` : null,
+    fetcher
+  );
+}
+
+export function useFolderChildren(folderId: string | null) {
+  return useSWR<FolderWithMeta[]>(
+    folderId ? `/api/vault/folders/${folderId}/children` : null,
+    fetcher
   );
 }
 
