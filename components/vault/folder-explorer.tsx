@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { PanelLeft } from "lucide-react";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { useFolderContents, useBreadcrumbs } from "@/app/lib/api";
 import { mutate } from "swr";
 
 export function FolderExplorer({ initialFolderId }: { initialFolderId?: string | null }) {
+  const router = useRouter();
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(initialFolderId ?? null);
   const [mobileTreeOpen, setMobileTreeOpen] = useState(false);
 
@@ -35,8 +37,9 @@ export function FolderExplorer({ initialFolderId }: { initialFolderId?: string |
     (folderId: string) => {
       setSelectedFolderId(folderId);
       setMobileTreeOpen(false);
+      router.replace(`/vault?tab=folders&folderId=${folderId}`, { scroll: false });
     },
-    []
+    [router]
   );
 
   const handleRefresh = useCallback(() => {

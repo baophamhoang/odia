@@ -52,7 +52,7 @@ function LoginCard() {
           )}
 
           <button
-            onClick={() => signIn("google", { callbackUrl: "/vault" })}
+            onClick={() => signIn("google", { callbackUrl: searchParams.get("redirectTo") || "/vault" })}
             className="group relative inline-flex w-full items-center justify-center gap-3 rounded-full border border-border/50 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] backdrop-blur-xl text-foreground px-6 py-4 text-sm font-semibold transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/30 active:scale-[0.98]"
           >
             <svg

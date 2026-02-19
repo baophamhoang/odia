@@ -23,9 +23,10 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   const session = req.auth;
 
   if (!session) {
+    const originalPath = req.nextUrl.pathname + req.nextUrl.search;
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
-    loginUrl.search = "";
+    loginUrl.search = `?redirectTo=${encodeURIComponent(originalPath)}`;
     return NextResponse.redirect(loginUrl);
   }
 
