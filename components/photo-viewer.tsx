@@ -3,8 +3,9 @@
 import { useState, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence, type PanInfo } from "motion/react";
-import { X, Download, ChevronLeft, ChevronRight, Trash2, Loader2 } from "lucide-react";
+import { X, Download, ChevronLeft, ChevronRight, Trash2, Loader2, FolderOpen, Footprints } from "lucide-react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { Photo } from "@/app/lib/types";
 
@@ -14,6 +15,8 @@ interface PhotoViewerProps {
   onClose: () => void;
   canDeletePhoto?: (photo: Photo) => boolean;
   onDeletePhoto?: (photo: Photo) => Promise<void>;
+  folderLink?: string | null;
+  runLink?: string | null;
 }
 
 export function PhotoViewer({
@@ -22,12 +25,15 @@ export function PhotoViewer({
   onClose,
   canDeletePhoto,
   onDeletePhoto,
+  folderLink,
+  runLink,
 }: PhotoViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [direction, setDirection] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const router = useRouter();
   const photo = photos[currentIndex];
 
   useEffect(() => {
@@ -142,6 +148,32 @@ export function PhotoViewer({
               )}
             </div>
             <div className="flex items-center gap-1">
+              {folderLink && (
+                <button
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                    router.push(folderLink);
+                  }}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                  <span className="hidden sm:inline">Folders</span>
+                </button>
+              )}
+              {runLink && (
+                <button
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                    router.push(runLink);
+                  }}
+                >
+                  <Footprints className="h-4 w-4" />
+                  <span className="hidden sm:inline">Run</span>
+                </button>
+              )}
               <button
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors text-sm"
                 onClick={(e) => {

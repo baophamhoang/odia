@@ -3,7 +3,7 @@
 import { auth } from '@/app/lib/auth';
 import { supabase } from '@/app/lib/db';
 import { getDownloadUrl, objectExists } from '@/app/lib/r2';
-import type { User, Photo, Run, RunCard } from '@/app/lib/types';
+import type { User, Photo, Run, RunCard, Folder } from '@/app/lib/types';
 
 // ---------------------------------------------------------------------------
 // getTeamMembers
@@ -27,7 +27,7 @@ export async function getTeamMembers(): Promise<User[]> {
 // ---------------------------------------------------------------------------
 
 export async function getMyUploadedPhotos(): Promise<
-  (Photo & { run: Run | null })[]
+  (Photo & { run: Run | null; folder: Folder | null })[]
 > {
   const session = await auth();
   if (!session?.user?.id) throw new Error('Unauthorized');
@@ -36,7 +36,7 @@ export async function getMyUploadedPhotos(): Promise<
 
   const { data: photos, error } = await supabase
     .from('photos')
-    .select('*, runs(*)')
+    .select('*, runs(*), folders!folder_id(*)')
     .eq('uploaded_by', userId)
     .order('created_at', { ascending: false });
 
@@ -46,8 +46,9 @@ export async function getMyUploadedPhotos(): Promise<
 
   const results = await Promise.all(
     (photos ?? []).map(async (row) => {
-      const { runs, ...photoFields } = row as typeof row & {
+      const { runs, folders, ...photoFields } = row as typeof row & {
         runs: Run | null;
+        folders: Folder | null;
       };
 
       // If this photo points to a deleted run (stale/orphaned row), hide it.
@@ -67,11 +68,12 @@ export async function getMyUploadedPhotos(): Promise<
         ...(photoFields as Photo),
         url,
         run: runs ?? null,
+        folder: folders ?? null,
       };
     }),
   );
 
-  return results.filter(Boolean) as (Photo & { run: Run | null })[];
+  return results.filter(Boolean) as (Photo & { run: Run | null; folder: Folder | null })[];
 }
 
 // ---------------------------------------------------------------------------

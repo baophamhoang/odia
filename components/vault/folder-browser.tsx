@@ -1,22 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import { useSession } from "next-auth/react";
 import { Footprints, Folder, LayoutGrid } from "lucide-react";
 import { useFolderContents } from "@/app/lib/api";
 import { FolderCard } from "@/components/vault/folder-card";
 import { FolderBrowserSkeleton } from "@/components/vault/folder-skeleton";
+import { PhotoGrid } from "@/components/photo-grid";
+import { deletePhoto } from "@/app/actions/photos";
 import { motion } from "motion/react";
-import type { Photo, FolderWithMeta } from "@/app/lib/types";
+import type { FolderWithMeta } from "@/app/lib/types";
 
 type FilterType = "all" | "runs" | "folders";
 
 interface FolderBrowserProps {
   folderId: string | null;
   onNavigate?: (folderId: string) => void;
+  onPhotosChanged?: () => void;
 }
 
-export function FolderBrowser({ folderId, onNavigate }: FolderBrowserProps) {
+export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderBrowserProps) {
+  const { data: session } = useSession();
   const { data: contents, isLoading } = useFolderContents(folderId);
   const [filter, setFilter] = useState<FilterType>("all");
 
@@ -103,11 +107,17 @@ export function FolderBrowser({ folderId, onNavigate }: FolderBrowserProps) {
               Photos
             </h3>
           )}
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-            {photos.map((photo, index) => (
-              <PhotoThumb key={photo.id} photo={photo} index={index} />
-            ))}
-          </div>
+          <PhotoGrid
+            photos={photos}
+            columns={3}
+            canDeletePhoto={(photo) => photo.uploaded_by === session?.user?.id}
+            onDeletePhoto={async (photo) => {
+              await deletePhoto(photo.id);
+              onPhotosChanged?.();
+            }}
+            folderLink={contents?.folder ? `/vault?tab=folders&folderId=${contents.folder.id}` : null}
+            runLink={contents?.folder?.folder_type === "run" && contents.folder.run_id ? `/runs/${contents.folder.run_id}` : null}
+          />
         </div>
       )}
 
@@ -186,23 +196,3 @@ function FilterButton({
   );
 }
 
-function PhotoThumb({ photo, index }: { photo: Photo; index: number }) {
-  if (!photo.url) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: index * 0.03, duration: 0.3 }}
-      className="relative aspect-square rounded-xl overflow-hidden bg-muted/30 group"
-    >
-      <Image
-        src={photo.url}
-        alt={photo.file_name ?? "Photo"}
-        fill
-        className="object-cover transition-transform duration-300 group-hover:scale-105"
-        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-      />
-    </motion.div>
-  );
-}

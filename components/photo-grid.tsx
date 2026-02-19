@@ -23,6 +23,8 @@ interface PhotoGridProps {
   grouped?: boolean;
   canDeletePhoto?: (photo: Photo) => boolean;
   onDeletePhoto?: (photo: Photo) => Promise<void>;
+  folderLink?: string | null;
+  runLink?: string | null;
 }
 
 /** Group photos by uploader, preserving order of first appearance. */
@@ -54,6 +56,8 @@ export function PhotoGrid({
   grouped = false,
   canDeletePhoto,
   onDeletePhoto,
+  folderLink,
+  runLink,
 }: PhotoGridProps) {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Photo | null>(null);
@@ -140,6 +144,8 @@ export function PhotoGrid({
             onClose={() => setViewerIndex(null)}
             canDeletePhoto={canDeletePhoto}
             onDeletePhoto={onDeletePhoto}
+            folderLink={folderLink}
+            runLink={runLink}
           />
         )}
 
@@ -317,6 +323,8 @@ export function PhotoGrid({
           onClose={() => setViewerIndex(null)}
           canDeletePhoto={canDeletePhoto}
           onDeletePhoto={onDeletePhoto}
+          folderLink={folderLink}
+          runLink={runLink}
         />
       )}
     </>

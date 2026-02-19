@@ -19,6 +19,7 @@ interface VaultViewProps {
   isRefreshing?: boolean;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
+  initialFolderId?: string | null;
 }
 
 export function VaultView({
@@ -27,6 +28,7 @@ export function VaultView({
   isRefreshing,
   activeTab = "recent",
   onTabChange,
+  initialFolderId,
 }: VaultViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -360,7 +362,7 @@ export function VaultView({
         </TabsContent>
 
         <TabsContent value="folders">
-          <FolderExplorer />
+          <FolderExplorer initialFolderId={initialFolderId} />
         </TabsContent>
       </Tabs>
     </div>

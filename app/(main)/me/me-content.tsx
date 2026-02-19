@@ -6,19 +6,19 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import { useRef } from "react";
-import { MapPin, Camera, ImageOff, Hash } from "lucide-react";
+import { MapPin, Camera, ImageOff, Hash, FolderOpen } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { TimelineSkeleton } from "@/components/skeleton";
-import type { Photo, Run, RunCard } from "@/app/lib/types";
+import type { Photo, Run, RunCard, Folder, FolderType } from "@/app/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface MyPhotosContentProps {
-  uploadedPhotos: (Photo & { run: Run | null })[];
+  uploadedPhotos: (Photo & { run: Run | null; folder: Folder | null })[];
   taggedRuns: RunCard[];
   isLoading?: boolean;
 }
@@ -28,6 +28,8 @@ interface TimelineNode {
   label: string; // human-readable label, e.g. "January 3, 2025"
   photos: Photo[];
   run?: RunCard;
+  runInfo?: { id: string; title: string | null; location: string | null; hashtags: string[] };
+  folder?: { id: string; name: string; folder_type: FolderType };
 }
 
 // ---------------------------------------------------------------------------
@@ -41,24 +43,48 @@ function toDateKey(isoString: string): string {
 }
 
 function buildUploadTimeline(
-  uploadedPhotos: (Photo & { run: Run | null })[]
+  uploadedPhotos: (Photo & { run: Run | null; folder: Folder | null })[]
 ): TimelineNode[] {
-  const map = new Map<string, Photo[]>();
+  // Group by folder (regardless of date) or by date for standalone photos
+  const map = new Map<
+    string,
+    { photos: Photo[]; run?: Run; folder?: Folder; latestDate: string }
+  >();
 
   for (const photo of uploadedPhotos) {
-    const key = toDateKey(photo.created_at);
-    const bucket = map.get(key) ?? [];
-    bucket.push({ ...photo, run_id: photo.run_id ?? "" });
-    map.set(key, bucket);
+    let sourceKey: string;
+
+    if (photo.folder_id && photo.folder) {
+      sourceKey = `folder:${photo.folder_id}`;
+    } else {
+      sourceKey = `date:${toDateKey(photo.created_at)}`;
+    }
+
+    const existing = map.get(sourceKey);
+    const bucket = existing ?? { photos: [], latestDate: photo.created_at };
+    bucket.photos.push({ ...photo, run_id: photo.run_id ?? "" });
+    if (photo.run) bucket.run = photo.run;
+    if (photo.folder) bucket.folder = photo.folder;
+    if (photo.created_at > bucket.latestDate) bucket.latestDate = photo.created_at;
+    map.set(sourceKey, bucket);
   }
 
   return Array.from(map.entries())
-    .sort(([a], [b]) => b.localeCompare(a)) // newest first
-    .map(([key, photos]) => ({
-      date: key,
-      label: format(parseISO(key), "MMMM d, yyyy"),
-      photos,
-    }));
+    .sort(([, a], [, b]) => b.latestDate.localeCompare(a.latestDate))
+    .map(([, { photos, run, folder, latestDate }]) => {
+      const dateKey = toDateKey(latestDate);
+      return {
+        date: dateKey,
+        label: format(parseISO(dateKey), "MMMM d, yyyy"),
+        photos,
+        runInfo: run
+          ? { id: run.id, title: run.title, location: run.location, hashtags: run.hashtags ?? [] }
+          : undefined,
+        folder: folder
+          ? { id: folder.id, name: folder.name, folder_type: folder.folder_type }
+          : undefined,
+      };
+    });
 }
 
 function buildTaggedTimeline(taggedRuns: RunCard[]): TimelineNode[] {
@@ -156,7 +182,7 @@ interface TimelineNodeCardProps {
   node: TimelineNode;
   index: number;
   isLast: boolean;
-  onPhotoClick: (photos: Photo[], index: number) => void;
+  onPhotoClick: (photos: Photo[], index: number, node: TimelineNode) => void;
 }
 
 function TimelineNodeCard({
@@ -209,66 +235,97 @@ function TimelineNodeCard({
 
         {/* glassmorphic card */}
         <div className="rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm shadow-sm overflow-hidden transition-all duration-300 hover:border-border/80 hover:bg-card/80 hover:shadow-md">
-          {/* run metadata header (only for tagged-in tab) */}
-          {node.run && (
+          {/* folder header (custom folder uploads, no run) */}
+          {node.folder && !node.run && !node.runInfo && (
             <div className="px-4 pt-3.5 pb-2.5 border-b border-border/50">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  {node.run.title && (
-                    <Link
-                      href={`/runs/${node.run.id}`}
-                      className="text-sm font-semibold text-foreground hover:text-foreground/80 transition-colors truncate block"
-                    >
-                      {node.run.title}
-                    </Link>
-                  )}
-                  {!node.run.title && (
-                    <Link
-                      href={`/runs/${node.run.id}`}
-                      className="text-sm font-medium text-muted-foreground/60 hover:text-muted-foreground/80 transition-colors"
-                    >
-                      View run
-                    </Link>
-                  )}
-                  {node.run.location && (
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground/80 mt-0.5">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      {node.run.location}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Badge
-                    variant="secondary"
-                    className="gap-1 text-[10px] px-1.5 py-0.5 bg-muted/50 text-muted-foreground/70 border-0"
+                <div className="flex items-center gap-2 min-w-0">
+                  <FolderOpen className="h-4 w-4 text-muted-foreground/70 shrink-0" />
+                  <Link
+                    href={`/vault?tab=folders&folderId=${node.folder.id}`}
+                    className="text-sm font-semibold text-foreground hover:text-foreground/80 transition-colors truncate"
                   >
-                    <Camera className="h-3 w-3" />
-                    {node.run.photo_count}
-                  </Badge>
+                    {node.folder.name}
+                  </Link>
                 </div>
+                <Badge
+                  variant="secondary"
+                  className="gap-1 text-[10px] px-1.5 py-0.5 bg-muted/50 text-muted-foreground/70 border-0 shrink-0"
+                >
+                  <Camera className="h-3 w-3" />
+                  {node.photos.length}
+                </Badge>
               </div>
-
-              {/* hashtags */}
-              {node.run.hashtags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {node.run.hashtags.slice(0, 4).map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/70 font-medium"
-                    >
-                      <Hash className="h-2.5 w-2.5" />
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
+          {/* run metadata header (tagged-in tab uses node.run, uploads tab uses node.runInfo) */}
+          {(node.run || node.runInfo) && (() => {
+            const runId = node.run?.id ?? node.runInfo!.id;
+            const title = node.run?.title ?? node.runInfo!.title;
+            const location = node.run?.location ?? node.runInfo!.location;
+            const hashtags = node.run?.hashtags ?? node.runInfo!.hashtags;
+            const photoCount = node.run?.photo_count ?? node.photos.length;
+            return (
+              <div className="px-4 pt-3.5 pb-2.5 border-b border-border/50">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    {title && (
+                      <Link
+                        href={`/runs/${runId}`}
+                        className="text-sm font-semibold text-foreground hover:text-foreground/80 transition-colors truncate block"
+                      >
+                        {title}
+                      </Link>
+                    )}
+                    {!title && (
+                      <Link
+                        href={`/runs/${runId}`}
+                        className="text-sm font-medium text-muted-foreground/60 hover:text-muted-foreground/80 transition-colors"
+                      >
+                        View run
+                      </Link>
+                    )}
+                    {location && (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground/80 mt-0.5">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        {location}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge
+                      variant="secondary"
+                      className="gap-1 text-[10px] px-1.5 py-0.5 bg-muted/50 text-muted-foreground/70 border-0"
+                    >
+                      <Camera className="h-3 w-3" />
+                      {photoCount}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* hashtags */}
+                {hashtags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {hashtags.slice(0, 4).map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/70 font-medium"
+                      >
+                        <Hash className="h-2.5 w-2.5" />
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* photo strip */}
           <div className="p-3">
-            <PhotoStrip photos={node.photos} onPhotoClick={onPhotoClick} />
+            <PhotoStrip photos={node.photos} onPhotoClick={(photos, index) => onPhotoClick(photos, index, node)} />
           </div>
         </div>
       </div>
@@ -288,10 +345,18 @@ function VerticalTimeline({ nodes }: VerticalTimelineProps) {
   const [viewer, setViewer] = useState<{
     photos: Photo[];
     index: number;
+    runLink?: string | null;
+    folderLink?: string | null;
   } | null>(null);
 
-  function handlePhotoClick(photos: Photo[], index: number) {
-    setViewer({ photos, index });
+  function handlePhotoClick(photos: Photo[], index: number, node: TimelineNode) {
+    const runId = node.run?.id ?? node.runInfo?.id;
+    setViewer({
+      photos,
+      index,
+      runLink: runId ? `/runs/${runId}` : null,
+      folderLink: node.folder ? `/vault?tab=folders&folderId=${node.folder.id}` : null,
+    });
   }
 
   return (
@@ -299,7 +364,7 @@ function VerticalTimeline({ nodes }: VerticalTimelineProps) {
       <div className="relative pl-0">
         {nodes.map((node, i) => (
           <TimelineNodeCard
-            key={`${node.date}-${node.run?.id ?? "upload"}`}
+            key={`${node.date}-${node.run?.id ?? node.runInfo?.id ?? node.folder?.id ?? "upload"}`}
             node={node}
             index={i}
             isLast={i === nodes.length - 1}
@@ -314,6 +379,8 @@ function VerticalTimeline({ nodes }: VerticalTimelineProps) {
             photos={viewer.photos}
             initialIndex={viewer.index}
             onClose={() => setViewer(null)}
+            folderLink={viewer.folderLink}
+            runLink={viewer.runLink}
           />
         )}
       </AnimatePresence>

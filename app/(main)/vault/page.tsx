@@ -9,6 +9,7 @@ function VaultPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get("tab") ?? "recent";
+  const folderId = searchParams.get("folderId") ?? null;
   const { data: runs, isLoading, isValidating } = useRuns();
 
   const onTabChange = (value: string) => {
@@ -24,6 +25,7 @@ function VaultPageContent() {
       isRefreshing={isValidating && !isLoading}
       activeTab={tab}
       onTabChange={onTabChange}
+      initialFolderId={folderId}
     />
   );
 }

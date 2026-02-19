@@ -5,6 +5,7 @@ import type {
   User,
   Photo,
   Run,
+  Folder,
   FolderContents,
   FolderWithMeta,
   BreadcrumbItem,
@@ -55,7 +56,7 @@ export function useTeamMembers() {
 }
 
 export function useMyPhotos() {
-  return useSWR<(Photo & { run: Run | null })[]>(
+  return useSWR<(Photo & { run: Run | null; folder: Folder | null })[]>(
     "/api/users/me/photos",
     fetcher,
     { revalidateOnFocus: false }

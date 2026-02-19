@@ -37,6 +37,7 @@ export interface RunCard extends Run {
 export interface Photo {
   id: string;
   run_id: string;
+  folder_id: string | null;
   storage_path: string;
   file_name: string | null;
   file_size: number | null;

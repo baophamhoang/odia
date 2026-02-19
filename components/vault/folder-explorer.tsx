@@ -18,8 +18,8 @@ import { Breadcrumbs } from "@/components/vault/breadcrumbs";
 import { useFolderContents, useBreadcrumbs } from "@/app/lib/api";
 import { mutate } from "swr";
 
-export function FolderExplorer() {
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+export function FolderExplorer({ initialFolderId }: { initialFolderId?: string | null }) {
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(initialFolderId ?? null);
   const [mobileTreeOpen, setMobileTreeOpen] = useState(false);
 
   // Fetch contents/breadcrumbs for the selected folder
@@ -111,6 +111,7 @@ export function FolderExplorer() {
           <FolderBrowser
             folderId={selectedFolderId}
             onNavigate={handleNavigate}
+            onPhotosChanged={handleRefresh}
           />
         </div>
       </div>
