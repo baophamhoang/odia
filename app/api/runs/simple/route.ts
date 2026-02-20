@@ -1,6 +1,8 @@
 import { auth } from "@/app/lib/auth";
 import { NextResponse } from "next/server";
-import { supabase } from "@/app/lib/db";
+import { db } from "@/app/lib/db";
+import { runs as runsTable } from "@/app/lib/schema";
+import { desc } from "drizzle-orm";
 
 export async function GET() {
   const session = await auth();
@@ -8,18 +10,15 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: runs, error } = await supabase
-    .from("runs")
-    .select("id, title, run_date")
-    .order("run_date", { ascending: false })
+  const runs = await db
+    .select({
+      id: runsTable.id,
+      title: runsTable.title,
+      run_date: runsTable.runDate,
+    })
+    .from(runsTable)
+    .orderBy(desc(runsTable.runDate))
     .limit(100);
 
-  if (error) {
-    return NextResponse.json(
-      { error: `Failed to fetch runs: ${error.message}` },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json(runs ?? []);
+  return NextResponse.json(runs);
 }

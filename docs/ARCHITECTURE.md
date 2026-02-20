@@ -9,7 +9,7 @@ Private running photo storage app for a small team.
 | Framework    | Next.js 16, React 19, TypeScript |
 | Styling      | Tailwind CSS 4                  |
 | Auth         | NextAuth v5 (Auth.js) + Google SSO |
-| Database     | Supabase (PostgreSQL)           |
+| Database     | Turso (libSQL/SQLite) + Drizzle ORM |
 | Photo Storage| Cloudflare R2 (S3-compatible)   |
 | Deployment   | Vercel                          |
 
@@ -25,14 +25,14 @@ Private running photo storage app for a small team.
 ┌──────────────────────┐   ┌──────────────────────────┐
 │   Next.js on Vercel  │   │     Cloudflare R2        │
 │                      │   │   (photo bucket)          │
-│  - Server Actions    │   └──────────────────────────┘
+│  - Drizzle ORM       │   └──────────────────────────┘
 │  - Auth middleware   │             ▲
 │  - Route Handlers    │─────────────┘
 └──────────┬───────────┘   presigned URL generation
            │
            ▼
 ┌──────────────────────┐
-│  Supabase PostgreSQL │
+│  Turso (libSQL)      │
 │  - users             │
 │  - allowed_emails    │
 │  - runs              │
@@ -217,7 +217,8 @@ app/
 │   └── skeleton.tsx                — skeleton loading components
 └── lib/
     ├── auth.ts                     — NextAuth config
-    ├── db.ts                       — Supabase client
+    ├── db.ts                       — Turso client (Drizzle)
+    ├── schema.ts                   — Drizzle schema definitions
     ├── r2.ts                       — R2 client + presigned URL helpers
     └── types.ts                    — shared TypeScript types
 ```

@@ -1,7 +1,8 @@
 "use server";
 
-import { auth } from "@/app/lib/auth";
-import { supabase } from "@/app/lib/db";
+import { db } from "@/app/lib/db";
+import { runs as runsTable, users as usersTable, runParticipants, photos as photosTable } from "@/app/lib/schema";
+import { eq, inArray, desc, sql } from "drizzle-orm";
 import { getDownloadUrl, deleteObject } from "@/app/lib/r2";
 import {
   getRootFolder,
@@ -30,80 +31,93 @@ async function attachSignedUrls(photos: Photo[]): Promise<Photo[]> {
 
 export async function getRuns(page: number = 1): Promise<RunCard[]> {
   const PAGE_SIZE = 20;
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
+  const offset = (page - 1) * PAGE_SIZE;
 
-  const { data: runs, error: runsError } = await supabase
-    .from("runs")
-    .select("*")
-    .order("run_date", { ascending: false })
-    .range(from, to);
+  const runs = await db
+    .select()
+    .from(runsTable)
+    .orderBy(desc(runsTable.runDate))
+    .limit(PAGE_SIZE)
+    .offset(offset);
 
-  if (runsError) {
-    throw new Error(`Failed to fetch runs: ${runsError.message}`);
-  }
-
-  if (!runs || runs.length === 0) {
+  if (runs.length === 0) {
     return [];
   }
 
   const runIds = runs.map((r) => r.id);
-  const creatorIds = [...new Set(runs.map((r) => r.created_by as string))];
+  const creatorIds = [...new Set(runs.map((r) => r.createdBy))];
 
   // Fetch creators, participants, and photos in parallel
   const [
-    { data: creators, error: creatorsError },
-    { data: participants, error: participantsError },
-    { data: photos, error: photosError },
-    { data: photoCounts, error: photoCountsError },
+    creators,
+    participants,
+    photos,
+    photoCounts,
   ] = await Promise.all([
-    supabase.from("users").select("*").in("id", creatorIds),
-    supabase
-      .from("run_participants")
-      .select("run_id, users(*)")
-      .in("run_id", runIds),
-    supabase
-      .from("photos")
-      .select("*")
-      .in("run_id", runIds)
-      .order("display_order", { ascending: true }),
-    supabase
-      .from("photos")
-      .select("run_id")
-      .in("run_id", runIds),
+    db.select().from(usersTable).where(inArray(usersTable.id, creatorIds)),
+    db
+      .select({
+        run_id: runParticipants.runId,
+        user: usersTable,
+      })
+      .from(runParticipants)
+      .innerJoin(usersTable, eq(runParticipants.userId, usersTable.id))
+      .where(inArray(runParticipants.runId, runIds)),
+    db
+      .select()
+      .from(photosTable)
+      .where(inArray(photosTable.runId, runIds))
+      .orderBy(photosTable.displayOrder),
+    db
+      .select({
+        run_id: photosTable.runId,
+        count: sql<number>`count(*)`,
+      })
+      .from(photosTable)
+      .where(inArray(photosTable.runId, runIds))
+      .groupBy(photosTable.runId),
   ]);
-
-  if (creatorsError) throw new Error(`Failed to fetch creators: ${creatorsError.message}`);
-  if (participantsError) throw new Error(`Failed to fetch participants: ${participantsError.message}`);
-  if (photosError) throw new Error(`Failed to fetch photos: ${photosError.message}`);
-  if (photoCountsError) throw new Error(`Failed to fetch photo counts: ${photoCountsError.message}`);
 
   // Index creators by id
   const creatorMap = new Map<string, User>(
-    (creators ?? []).map((u) => [u.id, u as User])
+    creators.map((u) => [u.id, u as User])
   );
 
   // Index participants by run_id
   const participantsByRun = new Map<string, User[]>();
-  for (const row of participants ?? []) {
+  for (const row of participants) {
+    if (!row.run_id) continue;
     const existing = participantsByRun.get(row.run_id) ?? [];
-    existing.push(row.users as unknown as User);
+    existing.push(row.user as User);
     participantsByRun.set(row.run_id, existing);
   }
 
-  // Count and group photos by run_id, limit to first 4 per run for preview
+  // Index photo counts by run_id
   const photoCountByRun = new Map<string, number>();
-  const previewPhotosByRun = new Map<string, Photo[]>();
-
-  for (const photo of photoCounts ?? []) {
-    photoCountByRun.set(photo.run_id, (photoCountByRun.get(photo.run_id) ?? 0) + 1);
+  for (const row of photoCounts) {
+    if (row.run_id) {
+      photoCountByRun.set(row.run_id, row.count);
+    }
   }
 
-  for (const photo of photos ?? []) {
-    const existing = previewPhotosByRun.get(photo.run_id) ?? [];
+  // Group photos by run_id, limit to first 4 per run for preview
+  const previewPhotosByRun = new Map<string, Photo[]>();
+  for (const photo of photos) {
+    if (!photo.runId) continue;
+    const existing = previewPhotosByRun.get(photo.runId) ?? [];
     if (existing.length < 4) {
-      existing.push(photo as Photo);
-      previewPhotosByRun.set(photo.run_id, existing);
+      existing.push({
+        id: photo.id,
+        run_id: photo.runId,
+        storage_path: photo.storagePath,
+        file_name: photo.fileName,
+        file_size: photo.fileSize,
+        mime_type: photo.mimeType,
+        display_order: photo.displayOrder,
+        uploaded_by: photo.uploadedBy,
+        created_at: photo.createdAt,
+      } as Photo);
+      previewPhotosByRun.set(photo.runId, existing);
     }
   }
 
@@ -118,12 +132,20 @@ export async function getRuns(page: number = 1): Promise<RunCard[]> {
 
   // Assemble RunCard objects
   const runCards: RunCard[] = runs.map((run) => {
-    const creator = creatorMap.get(run.created_by);
+    const creator = creatorMap.get(run.createdBy);
     if (!creator) {
       throw new Error(`Creator not found for run ${run.id}`);
     }
     return {
-      ...(run as typeof run & { hashtags: string[] }),
+      id: run.id,
+      run_date: run.runDate,
+      title: run.title,
+      description: run.description,
+      location: run.location,
+      hashtags: JSON.parse(run.hashtags ?? "[]"),
+      created_by: run.createdBy,
+      created_at: run.createdAt,
+      updated_at: run.updatedAt,
       creator,
       participants: participantsByRun.get(run.id) ?? [],
       photos: signedPreviewsByRun.get(run.id) ?? [],
@@ -139,46 +161,77 @@ export async function getRuns(page: number = 1): Promise<RunCard[]> {
 // ---------------------------------------------------------------------------
 
 export async function getRun(runId: string): Promise<RunWithDetails | null> {
-  const { data: run, error: runError } = await supabase
-    .from("runs")
-    .select("*")
-    .eq("id", runId)
-    .single();
-
-  if (runError) {
-    if (runError.code === "PGRST116") return null; // row not found
-    throw new Error(`Failed to fetch run: ${runError.message}`);
-  }
+  const run = await db.query.runs.findFirst({
+    where: eq(runsTable.id, runId),
+  });
 
   if (!run) return null;
 
   const [
-    { data: creator, error: creatorError },
-    { data: participants, error: participantsError },
-    { data: photos, error: photosError },
+    creator,
+    participants,
+    photos,
   ] = await Promise.all([
-    supabase.from("users").select("*").eq("id", run.created_by).single(),
-    supabase
-      .from("run_participants")
-      .select("users(*)")
-      .eq("run_id", runId),
-    supabase
-      .from("photos")
-      .select("*, uploader:uploaded_by(id, name, avatar_url)")
-      .eq("run_id", runId)
-      .order("display_order", { ascending: true }),
+    db.query.users.findFirst({
+      where: eq(usersTable.id, run.createdBy),
+    }),
+    db
+      .select({
+        user: usersTable,
+      })
+      .from(runParticipants)
+      .innerJoin(usersTable, eq(runParticipants.userId, usersTable.id))
+      .where(eq(runParticipants.runId, runId)),
+    db
+      .select({
+        id: photosTable.id,
+        runId: photosTable.runId,
+        storagePath: photosTable.storagePath,
+        fileName: photosTable.fileName,
+        fileSize: photosTable.fileSize,
+        mimeType: photosTable.mimeType,
+        displayOrder: photosTable.displayOrder,
+        uploadedBy: photosTable.uploadedBy,
+        createdAt: photosTable.createdAt,
+        uploader: {
+          id: usersTable.id,
+          name: usersTable.name,
+          avatar_url: usersTable.avatarUrl,
+        },
+      })
+      .from(photosTable)
+      .leftJoin(usersTable, eq(photosTable.uploadedBy, usersTable.id))
+      .where(eq(photosTable.runId, runId))
+      .orderBy(photosTable.displayOrder),
   ]);
 
-  if (creatorError) throw new Error(`Failed to fetch creator: ${creatorError.message}`);
-  if (participantsError) throw new Error(`Failed to fetch participants: ${participantsError.message}`);
-  if (photosError) throw new Error(`Failed to fetch photos: ${photosError.message}`);
+  if (!creator) throw new Error(`Creator not found for run ${runId}`);
 
-  const photosWithUrls = await attachSignedUrls((photos ?? []) as Photo[]);
+  const photosWithUrls = await attachSignedUrls(photos.map(p => ({
+    id: p.id,
+    run_id: p.runId,
+    storage_path: p.storagePath,
+    file_name: p.fileName,
+    file_size: p.fileSize,
+    mime_type: p.mimeType,
+    display_order: p.displayOrder,
+    uploaded_by: p.uploadedBy,
+    created_at: p.createdAt,
+    uploader: p.uploader,
+  }) as unknown as Photo));
 
   return {
-    ...(run as typeof run & { hashtags: string[] }),
+    id: run.id,
+    run_date: run.runDate,
+    title: run.title,
+    description: run.description,
+    location: run.location,
+    hashtags: JSON.parse(run.hashtags ?? "[]"),
+    created_by: run.createdBy,
+    created_at: run.createdAt,
+    updated_at: run.updatedAt,
     creator: creator as User,
-    participants: (participants ?? []).map((p) => p.users as unknown as User),
+    participants: participants.map((p) => p.user as User),
     photos: photosWithUrls,
   };
 }
@@ -186,6 +239,8 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
 // ---------------------------------------------------------------------------
 // createRun
 // ---------------------------------------------------------------------------
+
+import { auth } from "@/app/lib/auth";
 
 export async function createRun(data: {
   run_date: string;
@@ -201,50 +256,41 @@ export async function createRun(data: {
 
   const userId = session.user.id;
 
-  const { data: run, error: runError } = await supabase
-    .from("runs")
-    .insert({
-      run_date: data.run_date,
+  const [insertedRun] = await db
+    .insert(runsTable)
+    .values({
+      runDate: data.run_date,
       title: data.title ?? null,
       description: data.description ?? null,
       location: data.location ?? null,
-      hashtags: data.hashtags ?? [],
-      created_by: userId,
+      hashtags: JSON.stringify(data.hashtags ?? []),
+      createdBy: userId,
     })
-    .select("id")
-    .single();
+    .returning({ id: runsTable.id });
 
-  if (runError || !run) {
-    throw new Error(`Failed to create run: ${runError?.message}`);
+  if (!insertedRun) {
+    throw new Error(`Failed to create run`);
   }
 
-  const runId = run.id as string;
+  const runId = insertedRun.id;
 
   // Insert participants and link photos in parallel
   const operations: Promise<unknown>[] = [];
 
   if (data.participant_ids.length > 0) {
     operations.push(
-      Promise.resolve(
-        supabase.from("run_participants").insert(
-          data.participant_ids.map((uid) => ({ run_id: runId, user_id: uid }))
-        )
-      ).then(({ error }) => {
-        if (error) throw new Error(`Failed to add participants: ${error.message}`);
-      })
+      db.insert(runParticipants).values(
+        data.participant_ids.map((uid) => ({ runId: runId, userId: uid }))
+      )
     );
   }
 
   if (data.photo_ids.length > 0) {
     operations.push(
-      Promise.resolve(
-        supabase
-          .from("photos")
-          .update({ run_id: runId })
-          .in("id", data.photo_ids)
-      ).then(({ error }) => {
-        if (error) throw new Error(`Failed to link photos: ${error.message}`);
-      })
+      db
+        .update(photosTable)
+        .set({ runId: runId })
+        .where(inArray(photosTable.id, data.photo_ids))
     );
   }
 
@@ -292,60 +338,42 @@ export async function updateRun(
   const userId = session.user.id;
 
   // Verify ownership
-  const { data: run, error: runError } = await supabase
-    .from("runs")
-    .select("created_by")
-    .eq("id", runId)
-    .single();
+  const run = await db.query.runs.findFirst({
+    columns: { createdBy: true },
+    where: eq(runsTable.id, runId),
+  });
 
-  if (runError || !run) {
-    throw new Error(`Run not found: ${runError?.message ?? runId}`);
+  if (!run) {
+    throw new Error(`Run not found: ${runId}`);
   }
 
-  if (run.created_by !== userId) {
+  if (run.createdBy !== userId) {
     throw new Error("Forbidden: you are not the creator of this run");
   }
 
   // Build update payload — only include explicitly provided fields
-  const updatePayload: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
+  const updatePayload: any = {
+    updatedAt: new Date().toISOString(),
   };
 
   if (data.title !== undefined) updatePayload.title = data.title;
   if (data.description !== undefined) updatePayload.description = data.description;
   if (data.location !== undefined) updatePayload.location = data.location;
-  if (data.hashtags !== undefined) updatePayload.hashtags = data.hashtags;
+  if (data.hashtags !== undefined) updatePayload.hashtags = JSON.stringify(data.hashtags);
 
-  const { error: updateError } = await supabase
-    .from("runs")
-    .update(updatePayload)
-    .eq("id", runId);
-
-  if (updateError) {
-    throw new Error(`Failed to update run: ${updateError.message}`);
-  }
+  await db
+    .update(runsTable)
+    .set(updatePayload)
+    .where(eq(runsTable.id, runId));
 
   // Replace participants if provided
   if (data.participant_ids !== undefined) {
-    const { error: deleteError } = await supabase
-      .from("run_participants")
-      .delete()
-      .eq("run_id", runId);
-
-    if (deleteError) {
-      throw new Error(`Failed to remove participants: ${deleteError.message}`);
-    }
+    await db.delete(runParticipants).where(eq(runParticipants.runId, runId));
 
     if (data.participant_ids.length > 0) {
-      const { error: insertError } = await supabase
-        .from("run_participants")
-        .insert(
-          data.participant_ids.map((uid) => ({ run_id: runId, user_id: uid }))
-        );
-
-      if (insertError) {
-        throw new Error(`Failed to add participants: ${insertError.message}`);
-      }
+      await db.insert(runParticipants).values(
+        data.participant_ids.map((uid) => ({ runId: runId, userId: uid }))
+      );
     }
   }
 }
@@ -361,34 +389,29 @@ export async function deleteRun(runId: string): Promise<void> {
   const userId = session.user.id;
 
   // Verify ownership
-  const { data: run, error: runError } = await supabase
-    .from("runs")
-    .select("created_by")
-    .eq("id", runId)
-    .single();
+  const run = await db.query.runs.findFirst({
+    columns: { createdBy: true },
+    where: eq(runsTable.id, runId),
+  });
 
-  if (runError || !run) {
-    throw new Error(`Run not found: ${runError?.message ?? runId}`);
+  if (!run) {
+    throw new Error(`Run not found: ${runId}`);
   }
 
-  if (run.created_by !== userId) {
+  if (run.createdBy !== userId) {
     throw new Error("Forbidden: you are not the creator of this run");
   }
 
   // Fetch all photos for R2 cleanup
-  const { data: photos, error: photosError } = await supabase
-    .from("photos")
-    .select("storage_path")
-    .eq("run_id", runId);
-
-  if (photosError) {
-    throw new Error(`Failed to fetch photos for run: ${photosError.message}`);
-  }
+  const photos = await db
+    .select({ storagePath: photosTable.storagePath })
+    .from(photosTable)
+    .where(eq(photosTable.runId, runId));
 
   // Delete R2 objects in parallel
-  if (photos && photos.length > 0) {
+  if (photos.length > 0) {
     await Promise.all(
-      photos.map((photo) => deleteObject(photo.storage_path))
+      photos.map((photo) => deleteObject(photo.storagePath))
     );
   }
 
@@ -400,12 +423,5 @@ export async function deleteRun(runId: string): Promise<void> {
   }
 
   // Delete the run — photos and participants should cascade via DB constraints
-  const { error: deleteError } = await supabase
-    .from("runs")
-    .delete()
-    .eq("id", runId);
-
-  if (deleteError) {
-    throw new Error(`Failed to delete run: ${deleteError.message}`);
-  }
+  await db.delete(runsTable).where(eq(runsTable.id, runId));
 }
