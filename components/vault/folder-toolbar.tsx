@@ -2,7 +2,9 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { FolderPlus, Upload, ExternalLink, Loader2 } from "lucide-react";
+import { FolderPlus, Upload, ExternalLink, Loader2, Trash2, Link2 } from "lucide-react";
+import { toast } from "sonner";
+import { deleteFolder } from "@/app/actions/vault";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,41 +21,68 @@ import type { FolderType } from "@/app/lib/types";
 interface FolderToolbarProps {
   folderId: string;
   folderType: FolderType;
+  folderName: string;
   runId: string | null;
   onFolderCreated: () => void;
   onPhotosUploaded: () => void;
+  onFolderDeleted?: () => void;
 }
 
 export function FolderToolbar({
   folderId,
   folderType,
+  folderName,
   runId,
   onFolderCreated,
   onPhotosUploaded,
+  onFolderDeleted,
 }: FolderToolbarProps) {
   const [showNewFolder, setShowNewFolder] = useState(false);
-  const [folderName, setFolderName] = useState("");
+  const [newFolderName, setNewFolderName] = useState("");
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showDeleteFolder, setShowDeleteFolder] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  function handleCopyLink() {
+    navigator.clipboard.writeText(
+      `${window.location.origin}/vault?tab=folders&folderId=${folderId}`
+    );
+    toast.success("Link copied!");
+  }
+
   const handleCreateFolder = async () => {
-    if (!folderName.trim()) return;
+    if (!newFolderName.trim()) return;
     setCreating(true);
     try {
       const res = await fetch("/api/vault/folders/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parentId: folderId, name: folderName.trim() }),
+        body: JSON.stringify({ parentId: folderId, name: newFolderName.trim() }),
       });
       if (!res.ok) throw new Error("Failed to create folder");
-      setFolderName("");
+      setNewFolderName("");
       setShowNewFolder(false);
       onFolderCreated();
     } catch (e) {
       console.error("Create folder error:", e);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    setDeleting(true);
+    try {
+      await deleteFolder(folderId);
+      toast.success("Folder deleted");
+      setShowDeleteFolder(false);
+      onFolderDeleted?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete folder");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -123,12 +152,29 @@ export function FolderToolbar({
           {uploading ? "Uploading..." : "Upload Photos"}
         </Button>
 
+        <Button variant="outline" size="sm" onClick={handleCopyLink}>
+          <Link2 className="h-4 w-4" />
+          Copy Link
+        </Button>
+
         {folderType === "run" && runId && (
           <Button variant="ghost" size="sm" asChild>
             <Link href={`/runs/${runId}`}>
               <ExternalLink className="h-4 w-4" />
               View Run
             </Link>
+          </Button>
+        )}
+
+        {folderType === "custom" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => setShowDeleteFolder(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Folder
           </Button>
         )}
 
@@ -145,6 +191,28 @@ export function FolderToolbar({
         />
       </div>
 
+      {/* Delete Folder Dialog */}
+      <Dialog open={showDeleteFolder} onOpenChange={setShowDeleteFolder}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete &quot;{folderName}&quot;?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete this folder, all its subfolders, and all
+              photos inside them. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteFolder(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteFolder} disabled={deleting}>
+              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* New Folder Dialog */}
       <Dialog open={showNewFolder} onOpenChange={setShowNewFolder}>
         <DialogContent className="sm:max-w-md">
@@ -157,8 +225,8 @@ export function FolderToolbar({
           <div className="py-4">
             <Input
               placeholder="Folder name"
-              value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleCreateFolder();
               }}
@@ -174,7 +242,7 @@ export function FolderToolbar({
             </Button>
             <Button
               onClick={handleCreateFolder}
-              disabled={!folderName.trim() || creating}
+              disabled={!newFolderName.trim() || creating}
             >
               {creating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

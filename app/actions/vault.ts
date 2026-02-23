@@ -3,7 +3,8 @@
 import { db } from "@/app/lib/db";
 import { folders as foldersTable, photos as photosTable, users as usersTable, runs as runsTable } from "@/app/lib/schema";
 import { eq, and, sql, desc, inArray, like } from "drizzle-orm";
-import { getDownloadUrl } from "@/app/lib/r2";
+import { getDownloadUrl, deleteObject } from "@/app/lib/r2";
+import { auth } from "@/app/lib/auth";
 import type {
   Folder,
   FolderWithMeta,
@@ -514,6 +515,65 @@ async function getPreviewPhoto(folder: Folder): Promise<string | null> {
   }
 
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// deleteFolder
+// ---------------------------------------------------------------------------
+
+async function getDescendantFolderIds(rootId: string): Promise<string[]> {
+  const query = sql`
+    WITH RECURSIVE descendants AS (
+      SELECT id FROM folders WHERE id = ${rootId}
+      UNION ALL
+      SELECT f.id FROM folders f JOIN descendants d ON f.parent_id = d.id
+    )
+    SELECT id FROM descendants
+  `;
+  try {
+    const result = await db.run(query);
+    return (result.rows as unknown as { id: string }[]).map(r => r.id);
+  } catch {
+    const ids = [rootId];
+    const queue = [rootId];
+    while (queue.length) {
+      const pid = queue.shift()!;
+      const children = await db
+        .select({ id: foldersTable.id })
+        .from(foldersTable)
+        .where(eq(foldersTable.parentId, pid));
+      for (const c of children) { ids.push(c.id); queue.push(c.id); }
+    }
+    return ids;
+  }
+}
+
+export async function deleteFolder(folderId: string): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const folder = await db.query.folders.findFirst({
+    where: eq(foldersTable.id, folderId),
+  });
+  if (!folder) throw new Error("Folder not found");
+  if (folder.folderType !== "custom") throw new Error("Only custom folders can be deleted");
+  if (folder.createdBy !== session.user.id && session.user.role !== "admin") {
+    throw new Error("Forbidden");
+  }
+
+  const folderIds = await getDescendantFolderIds(folderId);
+
+  const photos = await db
+    .select({ storagePath: photosTable.storagePath })
+    .from(photosTable)
+    .where(inArray(photosTable.folderId, folderIds));
+
+  if (photos.length > 0) {
+    await Promise.all(photos.map(p => deleteObject(p.storagePath)));
+    await db.delete(photosTable).where(inArray(photosTable.folderId, folderIds));
+  }
+
+  await db.delete(foldersTable).where(eq(foldersTable.id, folderId));
 }
 
 // ---------------------------------------------------------------------------

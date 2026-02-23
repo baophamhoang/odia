@@ -3,9 +3,10 @@
 import { useState, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence, type PanInfo } from "motion/react";
-import { X, Download, ChevronLeft, ChevronRight, Trash2, Loader2, FolderOpen, Footprints } from "lucide-react";
+import { X, Download, ChevronLeft, ChevronRight, Trash2, Loader2, FolderOpen, Footprints, Link2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Photo } from "@/app/lib/types";
 
@@ -80,6 +81,12 @@ export function PhotoViewer({
 
     setCurrentIndex((prev) => Math.min(prev, photos.length - 1));
   }, [photos.length, onClose]);
+
+  function handleCopyLink() {
+    if (!photo?.url) return;
+    navigator.clipboard.writeText(photo.url);
+    toast.success("Link copied!");
+  }
 
   async function handleDownload() {
     if (!photo?.url) return;
@@ -183,6 +190,13 @@ export function PhotoViewer({
               >
                 <Download className="h-4 w-4" />
                 <span className="hidden sm:inline">Save</span>
+              </button>
+              <button
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors text-sm"
+                onClick={(e) => { e.stopPropagation(); handleCopyLink(); }}
+              >
+                <Link2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Copy Link</span>
               </button>
               {photo && canDeletePhoto?.(photo) && onDeletePhoto && (
                 <button
