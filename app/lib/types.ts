@@ -25,6 +25,7 @@ export interface RunWithDetails extends Run {
   creator: User;
   participants: User[];
   photos: Photo[];
+  folder_id?: string | null;
 }
 
 export interface RunCard extends Run {

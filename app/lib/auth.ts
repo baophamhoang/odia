@@ -71,6 +71,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const [upsertedUser] = await db
           .insert(users)
           .values({
+            id: crypto.randomUUID(),
             email: user.email,
             name: user.name ?? null,
             avatarUrl: avatarUrl,

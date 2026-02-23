@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/app/lib/db";
-import { runs as runsTable, users as usersTable, runParticipants, photos as photosTable } from "@/app/lib/schema";
-import { eq, inArray, desc, sql } from "drizzle-orm";
+import { runs as runsTable, users as usersTable, runParticipants, photos as photosTable, folders as foldersTable } from "@/app/lib/schema";
+import { eq, inArray, desc, sql, and } from "drizzle-orm";
 import { getDownloadUrl, deleteObject } from "@/app/lib/r2";
 import {
   getRootFolder,
@@ -171,6 +171,7 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
     creator,
     participants,
     photos,
+    runFolder,
   ] = await Promise.all([
     db.query.users.findFirst({
       where: eq(usersTable.id, run.createdBy),
@@ -186,6 +187,7 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
       .select({
         id: photosTable.id,
         runId: photosTable.runId,
+        folderId: photosTable.folderId,
         storagePath: photosTable.storagePath,
         fileName: photosTable.fileName,
         fileSize: photosTable.fileSize,
@@ -203,6 +205,10 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
       .leftJoin(usersTable, eq(photosTable.uploadedBy, usersTable.id))
       .where(eq(photosTable.runId, runId))
       .orderBy(photosTable.displayOrder),
+    db.query.folders.findFirst({
+      columns: { id: true },
+      where: and(eq(foldersTable.runId, runId), eq(foldersTable.folderType, "run")),
+    }),
   ]);
 
   if (!creator) throw new Error(`Creator not found for run ${runId}`);
@@ -210,6 +216,7 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
   const photosWithUrls = await attachSignedUrls(photos.map(p => ({
     id: p.id,
     run_id: p.runId,
+    folder_id: p.folderId,
     storage_path: p.storagePath,
     file_name: p.fileName,
     file_size: p.fileSize,
@@ -233,6 +240,7 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
     creator: creator as User,
     participants: participants.map((p) => p.user as User),
     photos: photosWithUrls,
+    folder_id: runFolder?.id ?? null,
   };
 }
 
@@ -259,6 +267,7 @@ export async function createRun(data: {
   const [insertedRun] = await db
     .insert(runsTable)
     .values({
+      id: crypto.randomUUID(),
       runDate: data.run_date,
       title: data.title ?? null,
       description: data.description ?? null,

@@ -11,6 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { TimelineSkeleton } from "@/components/skeleton";
+import { mutate as swrMutate } from "swr";
+import { deletePhoto } from "@/app/actions/photos";
 import type { Photo, Run, RunCard, Folder, FolderType } from "@/app/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -45,34 +47,53 @@ function toDateKey(isoString: string): string {
 function buildUploadTimeline(
   uploadedPhotos: (Photo & { run: Run | null; folder: Folder | null })[]
 ): TimelineNode[] {
-  // Group by folder (regardless of date) or by date for standalone photos
+  // Group by folder first (run or custom), then by run_id, then by upload date
   const map = new Map<
     string,
-    { photos: Photo[]; run?: Run; folder?: Folder; latestDate: string }
+    { photos: Photo[]; run?: Run; folder?: Folder; sortDate: string }
   >();
 
   for (const photo of uploadedPhotos) {
     let sourceKey: string;
 
     if (photo.folder_id && photo.folder) {
+      // covers both folder_type="run" and folder_type="custom"
       sourceKey = `folder:${photo.folder_id}`;
+    } else if (photo.run_id) {
+      // fallback: run linked but folder not set
+      sourceKey = `run:${photo.run_id}`;
     } else {
       sourceKey = `date:${toDateKey(photo.created_at)}`;
     }
 
     const existing = map.get(sourceKey);
-    const bucket = existing ?? { photos: [], latestDate: photo.created_at };
-    bucket.photos.push({ ...photo, run_id: photo.run_id ?? "" });
-    if (photo.run) bucket.run = photo.run;
-    if (photo.folder) bucket.folder = photo.folder;
-    if (photo.created_at > bucket.latestDate) bucket.latestDate = photo.created_at;
-    map.set(sourceKey, bucket);
+
+    if (!existing) {
+      // Determine representative sort date for this bucket
+      let sortDate: string;
+      if (photo.folder_id && photo.folder) {
+        sortDate = photo.folder.created_at;
+      } else if (photo.run_id && photo.run) {
+        sortDate = photo.run.run_date;
+      } else {
+        sortDate = photo.created_at;
+      }
+      const bucket = { photos: [] as Photo[], sortDate };
+      bucket.photos.push({ ...photo, run_id: photo.run_id ?? "" });
+      if (photo.run) (bucket as typeof bucket & { run?: Run }).run = photo.run;
+      if (photo.folder) (bucket as typeof bucket & { folder?: Folder }).folder = photo.folder;
+      map.set(sourceKey, bucket as { photos: Photo[]; run?: Run; folder?: Folder; sortDate: string });
+    } else {
+      existing.photos.push({ ...photo, run_id: photo.run_id ?? "" });
+      if (photo.run && !existing.run) existing.run = photo.run;
+      if (photo.folder && !existing.folder) existing.folder = photo.folder;
+    }
   }
 
-  return Array.from(map.entries())
-    .sort(([, a], [, b]) => b.latestDate.localeCompare(a.latestDate))
-    .map(([, { photos, run, folder, latestDate }]) => {
-      const dateKey = toDateKey(latestDate);
+  return Array.from(map.values())
+    .sort((a, b) => b.sortDate.localeCompare(a.sortDate))
+    .map(({ photos, run, folder, sortDate }) => {
+      const dateKey = toDateKey(sortDate);
       return {
         date: dateKey,
         label: format(parseISO(dateKey), "MMMM d, yyyy"),
@@ -339,14 +360,16 @@ function TimelineNodeCard({
 
 interface VerticalTimelineProps {
   nodes: TimelineNode[];
+  isUploadTab?: boolean;
 }
 
-function VerticalTimeline({ nodes }: VerticalTimelineProps) {
+function VerticalTimeline({ nodes, isUploadTab }: VerticalTimelineProps) {
   const [viewer, setViewer] = useState<{
     photos: Photo[];
     index: number;
     runLink?: string | null;
     folderLink?: string | null;
+    canDelete?: boolean;
   } | null>(null);
 
   function handlePhotoClick(photos: Photo[], index: number, node: TimelineNode) {
@@ -356,6 +379,7 @@ function VerticalTimeline({ nodes }: VerticalTimelineProps) {
       index,
       runLink: runId ? `/runs/${runId}` : null,
       folderLink: node.folder ? `/vault?tab=folders&folderId=${node.folder.id}` : null,
+      canDelete: !!isUploadTab,
     });
   }
 
@@ -381,6 +405,12 @@ function VerticalTimeline({ nodes }: VerticalTimelineProps) {
             onClose={() => setViewer(null)}
             folderLink={viewer.folderLink}
             runLink={viewer.runLink}
+            canDeletePhoto={viewer.canDelete ? () => true : undefined}
+            onDeletePhoto={viewer.canDelete ? async (photo) => {
+              setViewer(null);
+              await deletePhoto(photo.id);
+              await swrMutate("/api/users/me/photos");
+            } : undefined}
           />
         )}
       </AnimatePresence>
@@ -490,7 +520,7 @@ export function MyPhotosContent({
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.25 }}
               >
-                <VerticalTimeline nodes={uploadNodes} />
+                <VerticalTimeline nodes={uploadNodes} isUploadTab />
               </motion.div>
             )}
           </AnimatePresence>

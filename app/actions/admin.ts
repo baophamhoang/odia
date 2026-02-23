@@ -103,6 +103,7 @@ export async function setWhitelistEnabled(enabled: boolean): Promise<void> {
   await db
     .insert(allowedEmailsTable)
     .values({
+      id: crypto.randomUUID(),
       email: WHITELIST_BYPASS_EMAIL,
       addedBy: null,
     })
@@ -126,6 +127,7 @@ export async function addAllowedEmail(email: string): Promise<void> {
 
   try {
     await db.insert(allowedEmailsTable).values({
+      id: crypto.randomUUID(),
       email: normalizedEmail,
       addedBy: session.user.id,
     });

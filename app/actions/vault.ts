@@ -55,6 +55,52 @@ export async function getRootFolder(): Promise<Folder> {
 }
 
 // ---------------------------------------------------------------------------
+// createRootFolder
+// ---------------------------------------------------------------------------
+
+export async function createRootFolder(createdBy: string): Promise<Folder> {
+  const existing = await db.query.folders.findFirst({
+    where: eq(foldersTable.folderType, "root"),
+  });
+
+  if (existing) {
+    return {
+      ...existing,
+      parent_id: existing.parentId,
+      folder_type: existing.folderType,
+      run_id: existing.runId,
+      created_by: existing.createdBy,
+      created_at: existing.createdAt,
+      updated_at: existing.updatedAt,
+    } as unknown as Folder;
+  }
+
+  const [newRoot] = await db
+    .insert(foldersTable)
+    .values({
+      id: crypto.randomUUID(),
+      parentId: null,
+      name: "Vault",
+      slug: "vault",
+      folderType: "root",
+      createdBy,
+    })
+    .returning();
+
+  if (!newRoot) throw new Error("Failed to create root folder");
+
+  return {
+    ...newRoot,
+    parent_id: newRoot.parentId,
+    folder_type: newRoot.folderType,
+    run_id: newRoot.runId,
+    created_by: newRoot.createdBy,
+    created_at: newRoot.createdAt,
+    updated_at: newRoot.updatedAt,
+  } as unknown as Folder;
+}
+
+// ---------------------------------------------------------------------------
 // createRunFolder
 // ---------------------------------------------------------------------------
 
@@ -93,6 +139,7 @@ export async function createRunFolder(
   const [inserted] = await db
     .insert(foldersTable)
     .values({
+      id: crypto.randomUUID(),
       parentId: rootId,
       name,
       slug,
@@ -211,6 +258,7 @@ export async function createCustomFolder(
   const [inserted] = await db
     .insert(foldersTable)
     .values({
+      id: crypto.randomUUID(),
       parentId: parentId,
       name,
       slug,
@@ -313,6 +361,7 @@ export async function getFolderContents(
       .select({
         id: photosTable.id,
         runId: photosTable.runId,
+        folderId: photosTable.folderId,
         storagePath: photosTable.storagePath,
         fileName: photosTable.fileName,
         fileSize: photosTable.fileSize,
@@ -363,6 +412,7 @@ export async function getFolderContents(
     photos.map(async (photo) => ({
       id: photo.id,
       run_id: photo.runId,
+      folder_id: photo.folderId,
       storage_path: photo.storagePath,
       file_name: photo.fileName,
       file_size: photo.fileSize,
@@ -490,6 +540,7 @@ export async function migrateExistingRuns(): Promise<{
     const [newRoot] = await db
       .insert(foldersTable)
       .values({
+        id: crypto.randomUUID(),
         parentId: null,
         name: "Vault",
         slug: "vault",

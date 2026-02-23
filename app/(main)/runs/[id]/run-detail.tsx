@@ -424,6 +424,7 @@ export function RunDetail({
           grouped
           canDeletePhoto={canDeletePhoto}
           onDeletePhoto={handleDeletePhoto}
+          folderLink={run.folder_id ? `/vault?tab=folders&folderId=${run.folder_id}` : null}
         />
       </motion.div>
 

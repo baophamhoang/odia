@@ -31,6 +31,7 @@ export async function requestUploadUrls(
       const [photo] = await db
         .insert(photosTable)
         .values({
+          id: randomUUID(),
           runId: null,
           storagePath: storagePath,
           fileName: file.name,
