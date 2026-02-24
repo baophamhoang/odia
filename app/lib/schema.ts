@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, primaryKey, index, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ export const runParticipants = sqliteTable("run_participants", {
 
 export const folders = sqliteTable("folders", {
   id: text("id").primaryKey().default(sql`(uuid())`),
-  parentId: text("parent_id").references((): any => folders.id, { onDelete: "cascade" }),
+  parentId: text("parent_id").references((): AnySQLiteColumn => folders.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   folderType: text("folder_type", { enum: ["root", "run", "custom"] }).notNull().default("custom"),

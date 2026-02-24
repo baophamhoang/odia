@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useRuns } from "@/app/lib/api";
+import { useRuns, useRecentFolderPhotos } from "@/app/lib/api";
 import { VaultView } from "./vault-view";
 
 function VaultPageContent() {
@@ -11,6 +11,7 @@ function VaultPageContent() {
   const tab = searchParams.get("tab") ?? "recent";
   const folderId = searchParams.get("folderId") ?? null;
   const { data: runs, isLoading, isValidating } = useRuns();
+  const { data: folderGroups } = useRecentFolderPhotos();
 
   const onTabChange = (value: string) => {
     router.push(value === "recent" ? "/vault" : `/vault?tab=${value}`, {
@@ -26,6 +27,7 @@ function VaultPageContent() {
       activeTab={tab}
       onTabChange={onTabChange}
       initialFolderId={folderId}
+      folderGroups={folderGroups ?? []}
     />
   );
 }

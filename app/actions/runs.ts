@@ -361,7 +361,7 @@ export async function updateRun(
   }
 
   // Build update payload — only include explicitly provided fields
-  const updatePayload: any = {
+  const updatePayload: Record<string, string | null> = {
     updatedAt: new Date().toISOString(),
   };
 

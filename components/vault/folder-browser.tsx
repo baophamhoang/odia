@@ -73,7 +73,6 @@ export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderB
   const { subfolders, photos } = contents;
   const runFolders = subfolders.filter((f) => f.folder_type === "run");
   const customFolders = subfolders.filter((f) => f.folder_type !== "run");
-  const hasMultipleTypes = runFolders.length > 0 && customFolders.length > 0;
   const isEmpty = subfolders.length === 0 && photos.length === 0;
 
   const filteredRuns = filter === "folders" ? [] : runFolders;

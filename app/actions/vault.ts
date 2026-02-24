@@ -518,6 +518,79 @@ async function getPreviewPhoto(folder: Folder): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
+// getRecentCustomFolderPhotos
+// ---------------------------------------------------------------------------
+
+const FOLDER_PHOTO_LIMIT = 6;
+
+export async function getRecentCustomFolderPhotos(): Promise<{
+  folder: Folder;
+  photos: Photo[];
+  total_count: number;
+}[]> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const root = await getRootFolder();
+
+  const customFolders = await db
+    .select()
+    .from(foldersTable)
+    .where(and(eq(foldersTable.parentId, root.id), eq(foldersTable.folderType, "custom")))
+    .orderBy(desc(foldersTable.updatedAt));
+
+  const results = await Promise.all(
+    customFolders.map(async (folder) => {
+      const [photos, [{ count: total }]] = await Promise.all([
+        db.select().from(photosTable)
+          .where(eq(photosTable.folderId, folder.id))
+          .orderBy(desc(photosTable.createdAt))
+          .limit(FOLDER_PHOTO_LIMIT),
+        db.select({ count: sql<number>`count(*)` })
+          .from(photosTable)
+          .where(eq(photosTable.folderId, folder.id)),
+      ]);
+
+      const photosWithUrls: Photo[] = await Promise.all(
+        photos.map(async (p) => ({
+          id: p.id,
+          run_id: p.runId ?? "",
+          folder_id: p.folderId,
+          storage_path: p.storagePath,
+          file_name: p.fileName,
+          file_size: p.fileSize,
+          mime_type: p.mimeType,
+          display_order: p.displayOrder,
+          uploaded_by: p.uploadedBy,
+          created_at: p.createdAt,
+          url: await getDownloadUrl(p.storagePath),
+        } as Photo))
+      );
+
+      const folderMapped: Folder = {
+        id: folder.id,
+        parent_id: folder.parentId,
+        name: folder.name,
+        slug: folder.slug,
+        folder_type: folder.folderType as Folder["folder_type"],
+        run_id: folder.runId,
+        created_by: folder.createdBy,
+        created_at: folder.createdAt,
+        updated_at: folder.updatedAt,
+      } as unknown as Folder;
+
+      return {
+        folder: folderMapped,
+        photos: photosWithUrls,
+        total_count: Number(total),
+      };
+    })
+  );
+
+  return results.filter((r) => r.total_count > 0);
+}
+
+// ---------------------------------------------------------------------------
 // deleteFolder
 // ---------------------------------------------------------------------------
 

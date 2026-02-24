@@ -2,8 +2,14 @@
 
 import { auth } from '@/app/lib/auth';
 import { db } from '@/app/lib/db';
-import { users as usersTable, photos as photosTable, runs as runsTable, runParticipants, folders as foldersTable } from '@/app/lib/schema';
-import { eq, inArray, desc, sql, and } from 'drizzle-orm';
+import {
+  users as usersTable,
+  photos as photosTable,
+  runs as runsTable,
+  runParticipants,
+  folders as foldersTable,
+} from '@/app/lib/schema';
+import { eq, inArray, desc, sql } from 'drizzle-orm';
 import { getDownloadUrl, objectExists } from '@/app/lib/r2';
 import type { User, Photo, Run, RunCard, Folder } from '@/app/lib/types';
 
@@ -69,28 +75,35 @@ export async function getMyUploadedPhotos(): Promise<
         uploaded_by: photo.uploadedBy,
         created_at: photo.createdAt,
         url,
-        run: run ? {
-          ...run,
-          run_date: run.runDate,
-          created_by: run.createdBy,
-          created_at: run.createdAt,
-          updated_at: run.updatedAt,
-          hashtags: JSON.parse(run.hashtags ?? "[]")
-        } as unknown as Run : null,
-        folder: folder ? {
-          ...folder,
-          parent_id: folder.parentId,
-          folder_type: folder.folderType,
-          run_id: folder.runId,
-          created_by: folder.createdBy,
-          created_at: folder.createdAt,
-          updated_at: folder.updatedAt
-        } as unknown as Folder : null,
+        run: run
+          ? ({
+              ...run,
+              run_date: run.runDate,
+              created_by: run.createdBy,
+              created_at: run.createdAt,
+              updated_at: run.updatedAt,
+              hashtags: JSON.parse(run.hashtags ?? '[]'),
+            } as unknown as Run)
+          : null,
+        folder: folder
+          ? ({
+              ...folder,
+              parent_id: folder.parentId,
+              folder_type: folder.folderType,
+              run_id: folder.runId,
+              created_by: folder.createdBy,
+              created_at: folder.createdAt,
+              updated_at: folder.updatedAt,
+            } as unknown as Folder)
+          : null,
       };
     }),
   );
 
-  return results.filter(Boolean) as (Photo & { run: Run | null; folder: Folder | null })[];
+  return results.filter(Boolean) as (Photo & {
+    run: Run | null;
+    folder: Folder | null;
+  })[];
 }
 
 // ---------------------------------------------------------------------------
@@ -127,12 +140,7 @@ export async function getMyTaggedRuns(): Promise<RunCard[]> {
 
   const creatorIds = [...new Set(runs.map((r) => r.createdBy))];
 
-  const [
-    creators,
-    participants,
-    photos,
-    photoCounts,
-  ] = await Promise.all([
+  const [creators, participants, photos, photoCounts] = await Promise.all([
     db.select().from(usersTable).where(inArray(usersTable.id, creatorIds)),
     db
       .select({
@@ -224,7 +232,7 @@ export async function getMyTaggedRuns(): Promise<RunCard[]> {
       title: run.title,
       description: run.description,
       location: run.location,
-      hashtags: JSON.parse(run.hashtags ?? "[]"),
+      hashtags: JSON.parse(run.hashtags ?? '[]'),
       created_by: run.createdBy,
       created_at: run.createdAt,
       updated_at: run.updatedAt,

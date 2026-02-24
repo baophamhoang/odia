@@ -24,7 +24,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       const { db } = await import('@/app/lib/db');
       const { allowedEmails } = await import('@/app/lib/schema');
-      const { inArray, or, eq } = await import('drizzle-orm');
+      const { or, eq } = await import('drizzle-orm');
 
       // Access-control gate:
       // - allow if sentinel marker exists (whitelist OFF)

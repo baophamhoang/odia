@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { ChevronRight, Folder, Footprints, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFolderChildren, useFolderContents } from "@/app/lib/api";
-import type { FolderWithMeta, FolderType } from "@/app/lib/types";
+import type { FolderType } from "@/app/lib/types";
 
 interface FolderTreeProps {
   selectedId: string | null;
@@ -56,7 +56,6 @@ function TreeNode({
   id,
   name,
   folderType,
-  runId,
   depth,
   selectedId,
   onSelect,
@@ -82,7 +81,6 @@ function TreeNode({
   }, [id, onSelect, expanded]);
 
   const hasChildren = children === undefined || (children && children.length > 0);
-  const Icon = getFolderTreeIcon(folderType, expanded);
 
   return (
     <div role="treeitem" aria-expanded={expanded} aria-selected={isSelected}>
@@ -112,7 +110,12 @@ function TreeNode({
           />
         </button>
 
-        <Icon className="h-4 w-4 shrink-0 opacity-60" />
+        {folderType === "run"
+          ? <Footprints className="h-4 w-4 shrink-0 opacity-60" />
+          : expanded
+            ? <FolderOpen className="h-4 w-4 shrink-0 opacity-60" />
+            : <Folder className="h-4 w-4 shrink-0 opacity-60" />
+        }
 
         <span className="truncate text-[13px]">{name}</span>
       </div>
@@ -137,11 +140,3 @@ function TreeNode({
   );
 }
 
-function getFolderTreeIcon(folderType: FolderType, expanded: boolean) {
-  switch (folderType) {
-    case "run":
-      return Footprints;
-    default:
-      return expanded ? FolderOpen : Folder;
-  }
-}

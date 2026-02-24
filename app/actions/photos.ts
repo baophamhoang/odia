@@ -5,10 +5,9 @@ import path from "path";
 
 import { auth } from "@/app/lib/auth";
 import { db } from "@/app/lib/db";
-import { photos as photosTable, runs as runsTable, users as usersTable } from "@/app/lib/schema";
-import { eq, inArray, desc } from "drizzle-orm";
+import { photos as photosTable, runs as runsTable } from "@/app/lib/schema";
+import { eq, desc } from "drizzle-orm";
 import { getUploadUrl, deleteObject } from "@/app/lib/r2";
-import type { Photo } from "@/app/lib/types";
 
 // ---------------------------------------------------------------------------
 // requestUploadUrls

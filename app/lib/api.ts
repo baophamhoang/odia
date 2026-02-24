@@ -71,6 +71,18 @@ export function useMyTaggedRuns() {
   );
 }
 
+export interface FolderPhotoGroup {
+  folder: Folder;
+  photos: Photo[];
+  total_count: number;
+}
+
+export function useRecentFolderPhotos() {
+  return useSWR<FolderPhotoGroup[]>("/api/vault/recent-photos", fetcher, {
+    revalidateOnFocus: false,
+  });
+}
+
 export function useFolderContents(folderId: string | null) {
   return useSWR<FolderContents>(
     folderId ? `/api/vault/folders/${folderId}` : "/api/vault/folders",

@@ -3,7 +3,7 @@
 import { auth } from "@/app/lib/auth";
 import { db } from "@/app/lib/db";
 import { allowedEmails as allowedEmailsTable, users as usersTable } from "@/app/lib/schema";
-import { eq, inArray, desc, and, ne } from "drizzle-orm";
+import { eq, inArray, desc, ne } from "drizzle-orm";
 import { WHITELIST_BYPASS_EMAIL } from "@/app/lib/constants";
 import type { AllowedEmail, User, UserRole } from "@/app/lib/types";
 
@@ -131,11 +131,12 @@ export async function addAllowedEmail(email: string): Promise<void> {
       email: normalizedEmail,
       addedBy: session.user.id,
     });
-  } catch (error: any) {
-    if (error.message?.includes("UNIQUE constraint failed")) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("UNIQUE constraint failed")) {
       throw new Error("This email is already on the whitelist");
     }
-    throw new Error(`Failed to add email: ${error.message}`);
+    throw new Error(`Failed to add email: ${msg}`);
   }
 }
 

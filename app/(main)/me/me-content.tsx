@@ -6,7 +6,7 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import { useRef } from "react";
-import { MapPin, Camera, ImageOff, Hash, FolderOpen } from "lucide-react";
+import { MapPin, Camera, ImageOff, Hash, FolderOpen, Footprints } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { PhotoViewer } from "@/components/photo-viewer";
@@ -203,6 +203,7 @@ interface TimelineNodeCardProps {
   node: TimelineNode;
   index: number;
   isLast: boolean;
+  showDate: boolean;
   onPhotoClick: (photos: Photo[], index: number, node: TimelineNode) => void;
 }
 
@@ -210,6 +211,7 @@ function TimelineNodeCard({
   node,
   index,
   isLast,
+  showDate,
   onPhotoClick,
 }: TimelineNodeCardProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -250,9 +252,11 @@ function TimelineNodeCard({
       {/* Right: content card */}
       <div className="flex-1 pb-10">
         {/* date label */}
-        <time className="block text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/80 mb-3 mt-0.5">
-          {node.label}
-        </time>
+        {showDate && (
+          <time className="block text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/80 mb-3 mt-0.5">
+            {node.label}
+          </time>
+        )}
 
         {/* glassmorphic card */}
         <div className="rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm shadow-sm overflow-hidden transition-all duration-300 hover:border-border/80 hover:bg-card/80 hover:shadow-md">
@@ -294,16 +298,18 @@ function TimelineNodeCard({
                     {title && (
                       <Link
                         href={`/runs/${runId}`}
-                        className="text-sm font-semibold text-foreground hover:text-foreground/80 transition-colors truncate block"
+                        className="flex items-center gap-1.5 text-sm font-semibold text-foreground hover:text-foreground/80 transition-colors"
                       >
-                        {title}
+                        <Footprints className="h-4 w-4 text-muted-foreground/60 shrink-0" />
+                        <span className="truncate">{title}</span>
                       </Link>
                     )}
                     {!title && (
                       <Link
                         href={`/runs/${runId}`}
-                        className="text-sm font-medium text-muted-foreground/60 hover:text-muted-foreground/80 transition-colors"
+                        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground/60 hover:text-muted-foreground/80 transition-colors"
                       >
+                        <Footprints className="h-4 w-4 shrink-0" />
                         View run
                       </Link>
                     )}
@@ -392,6 +398,7 @@ function VerticalTimeline({ nodes, isUploadTab }: VerticalTimelineProps) {
             node={node}
             index={i}
             isLast={i === nodes.length - 1}
+            showDate={i === 0 || node.date !== nodes[i - 1].date}
             onPhotoClick={handlePhotoClick}
           />
         ))}
