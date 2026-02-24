@@ -324,7 +324,13 @@ async function getBreadcrumbsFallback(
   let currentId: string | null = folderId;
 
   while (currentId) {
-    const row = await db.query.folders.findFirst({
+    const row: {
+      id: string;
+      parentId: string | null;
+      name: string;
+      slug: string;
+      folderType: string;
+    } | undefined = await db.query.folders.findFirst({
       columns: { id: true, parentId: true, name: true, slug: true, folderType: true },
       where: eq(foldersTable.id, currentId),
     });
