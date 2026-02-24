@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { Footprints, Folder, LayoutGrid } from "lucide-react";
+import { Footprints, Folder, LayoutGrid, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useFolderContents } from "@/app/lib/api";
 import { FolderCard } from "@/components/vault/folder-card";
 import { FolderBrowserSkeleton } from "@/components/vault/folder-skeleton";
@@ -23,6 +24,30 @@ export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderB
   const { data: session } = useSession();
   const { data: contents, isLoading } = useFolderContents(folderId);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  async function handleBulkDownload() {
+    if (!contents || contents.photos.length === 0) return;
+    setIsDownloading(true);
+    try {
+      const JSZip = (await import("jszip")).default;
+      const { saveAs } = await import("file-saver");
+      const zip = new JSZip();
+      await Promise.all(
+        contents.photos.map(async (photo, i) => {
+          const res = await fetch(photo.url!);
+          const blob = await res.blob();
+          zip.file(photo.file_name ?? `photo-${i + 1}.jpg`, blob);
+        })
+      );
+      saveAs(await zip.generateAsync({ type: "blob" }), `${contents.folder.name}-photos.zip`);
+      toast.success("Download started!");
+    } catch {
+      toast.error("Failed to download photos");
+    } finally {
+      setIsDownloading(false);
+    }
+  }
 
   if (isLoading) {
     return <FolderBrowserSkeleton />;
@@ -48,7 +73,6 @@ export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderB
   const { subfolders, photos } = contents;
   const runFolders = subfolders.filter((f) => f.folder_type === "run");
   const customFolders = subfolders.filter((f) => f.folder_type !== "run");
-  const hasMultipleTypes = runFolders.length > 0 && customFolders.length > 0;
   const isEmpty = subfolders.length === 0 && photos.length === 0;
 
   const filteredRuns = filter === "folders" ? [] : runFolders;
@@ -102,11 +126,27 @@ export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderB
       {/* Photo grid */}
       {showPhotos && photos.length > 0 && (
         <div>
-          {subfolders.length > 0 && (
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-4">
-              Photos
-            </h3>
-          )}
+          <div className="flex items-center justify-between mb-4">
+            {subfolders.length > 0 ? (
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50">
+                Photos
+              </h3>
+            ) : (
+              <span />
+            )}
+            <button
+              onClick={handleBulkDownload}
+              disabled={isDownloading}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground/60 hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {isDownloading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              Download All
+            </button>
+          </div>
           <PhotoGrid
             photos={photos}
             columns={3}

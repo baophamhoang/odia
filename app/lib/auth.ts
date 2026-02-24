@@ -22,22 +22,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (!email) return '/login?error=not_whitelisted';
       const normalizedEmail = email.toLowerCase().trim();
 
-      const { supabase } = await import('@/app/lib/db');
+      const { db } = await import('@/app/lib/db');
+      const { allowedEmails } = await import('@/app/lib/schema');
+      const { or, eq } = await import('drizzle-orm');
 
       // Access-control gate:
       // - allow if sentinel marker exists (whitelist OFF)
       // - allow if user email is explicitly whitelisted
-      const { data: allowedRows, error: allowedRowsError } = await supabase
-        .from('allowed_emails')
-        .select('email')
-        .in('email', [normalizedEmail, WHITELIST_BYPASS_EMAIL]);
+      const allowedRows = await db
+        .select({ email: allowedEmails.email })
+        .from(allowedEmails)
+        .where(
+          or(
+            eq(allowedEmails.email, normalizedEmail),
+            eq(allowedEmails.email, WHITELIST_BYPASS_EMAIL)
+          )
+        );
 
-      if (allowedRowsError) return '/login?error=not_whitelisted';
-
-      const hasBypass = (allowedRows ?? []).some(
+      const hasBypass = allowedRows.some(
         (row) => row.email === WHITELIST_BYPASS_EMAIL,
       );
-      const isWhitelisted = (allowedRows ?? []).some(
+      const isWhitelisted = allowedRows.some(
         (row) => row.email === normalizedEmail,
       );
 
@@ -52,7 +57,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       // On initial sign in, upsert user and read role from users table
       if (account && profile && user.email) {
-        const { supabase } = await import('@/app/lib/db');
+        const { db } = await import('@/app/lib/db');
+        const { users } = await import('@/app/lib/schema');
+        const { eq } = await import('drizzle-orm');
 
         const avatarUrl =
           (profile as { picture?: string }).picture ??
@@ -60,37 +67,37 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           null;
 
         // Upsert user — role defaults to 'member' on first signup,
-        // preserves existing role on subsequent logins (ignoreDuplicates: false
-        // updates name/avatar but NOT role since we omit it from the upsert)
-        const { data, error } = await supabase
-          .from('users')
-          .upsert(
-            {
-              email: user.email,
+        // preserves existing role on subsequent logins
+        const [upsertedUser] = await db
+          .insert(users)
+          .values({
+            id: crypto.randomUUID(),
+            email: user.email,
+            name: user.name ?? null,
+            avatarUrl: avatarUrl,
+          })
+          .onConflictDoUpdate({
+            target: users.email,
+            set: {
               name: user.name ?? null,
-              avatar_url: avatarUrl,
+              avatarUrl: avatarUrl,
             },
-            {
-              onConflict: 'email',
-              ignoreDuplicates: false,
-            },
-          )
-          .select('id, role')
-          .single();
+          })
+          .returning({ id: users.id, role: users.role });
 
-        if (!error && data) {
-          token.userId = data.id as string;
-          token.role = data.role as UserRole;
+        if (upsertedUser) {
+          token.userId = upsertedUser.id;
+          token.role = upsertedUser.role as UserRole;
         } else {
           // Fallback: read existing user
-          const { data: existing, error: existingError } = await supabase
-            .from('users')
-            .select('id, role')
-            .eq('email', user.email)
-            .single();
+          const existing = await db
+            .select({ id: users.id, role: users.role })
+            .from(users)
+            .where(eq(users.email, user.email))
+            .get();
 
-          if (!existingError && existing) {
-            token.userId = existing.id as string;
+          if (existing) {
+            token.userId = existing.id;
             token.role = existing.role as UserRole;
           }
         }

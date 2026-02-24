@@ -50,6 +50,20 @@ export function FolderExplorer({ initialFolderId }: { initialFolderId?: string |
     mutate("/api/vault/folders");
   }, [currentFolderId]);
 
+  const handleFolderDeleted = useCallback(() => {
+    const parentId = contents?.folder?.parent_id ?? null;
+    setSelectedFolderId(parentId);
+    router.replace(
+      parentId ? `/vault?tab=folders&folderId=${parentId}` : "/vault?tab=folders",
+      { scroll: false }
+    );
+    mutate("/api/vault/folders");
+    if (parentId) {
+      mutate(`/api/vault/folders/${parentId}`);
+      mutate(`/api/vault/folders/${parentId}/children`);
+    }
+  }, [contents, router]);
+
   return (
     <div className="flex gap-0 min-h-[500px]">
       {/* Desktop sidebar */}
@@ -102,9 +116,11 @@ export function FolderExplorer({ initialFolderId }: { initialFolderId?: string |
             <FolderToolbar
               folderId={currentFolderId}
               folderType={currentFolder.folder_type}
+              folderName={currentFolder.name}
               runId={currentFolder.run_id}
               onFolderCreated={handleRefresh}
               onPhotosUploaded={handleRefresh}
+              onFolderDeleted={handleFolderDeleted}
             />
           )}
         </div>

@@ -1,7 +1,10 @@
 "use server";
 
-import { supabase } from "@/app/lib/db";
-import { getDownloadUrl } from "@/app/lib/r2";
+import { db } from "@/app/lib/db";
+import { folders as foldersTable, photos as photosTable, users as usersTable, runs as runsTable } from "@/app/lib/schema";
+import { eq, and, sql, desc, inArray, like } from "drizzle-orm";
+import { getDownloadUrl, deleteObject } from "@/app/lib/r2";
+import { auth } from "@/app/lib/auth";
 import type {
   Folder,
   FolderWithMeta,
@@ -33,21 +36,73 @@ function formatDateSlug(date: Date): string {
 // ---------------------------------------------------------------------------
 
 export async function getRootFolder(): Promise<Folder> {
-  const { data, error } = await supabase
-    .from("folders")
-    .select("*")
-    .eq("folder_type", "root")
-    .single();
+  const root = await db.query.folders.findFirst({
+    where: eq(foldersTable.folderType, "root"),
+  });
 
-  if (error || !data) {
-    throw new Error(`Root folder not found: ${error?.message}`);
+  if (!root) {
+    throw new Error(`Root folder not found`);
   }
 
-  return data as Folder;
+  return {
+    ...root,
+    parent_id: root.parentId,
+    folder_type: root.folderType,
+    run_id: root.runId,
+    created_by: root.createdBy,
+    created_at: root.createdAt,
+    updated_at: root.updatedAt,
+  } as unknown as Folder;
 }
 
 // ---------------------------------------------------------------------------
-// createRunFolder — flat at root: run_YYYY-MM-DD, run_YYYY-MM-DD_1, etc.
+// createRootFolder
+// ---------------------------------------------------------------------------
+
+export async function createRootFolder(createdBy: string): Promise<Folder> {
+  const existing = await db.query.folders.findFirst({
+    where: eq(foldersTable.folderType, "root"),
+  });
+
+  if (existing) {
+    return {
+      ...existing,
+      parent_id: existing.parentId,
+      folder_type: existing.folderType,
+      run_id: existing.runId,
+      created_by: existing.createdBy,
+      created_at: existing.createdAt,
+      updated_at: existing.updatedAt,
+    } as unknown as Folder;
+  }
+
+  const [newRoot] = await db
+    .insert(foldersTable)
+    .values({
+      id: crypto.randomUUID(),
+      parentId: null,
+      name: "Vault",
+      slug: "vault",
+      folderType: "root",
+      createdBy,
+    })
+    .returning();
+
+  if (!newRoot) throw new Error("Failed to create root folder");
+
+  return {
+    ...newRoot,
+    parent_id: newRoot.parentId,
+    folder_type: newRoot.folderType,
+    run_id: newRoot.runId,
+    created_by: newRoot.createdBy,
+    created_at: newRoot.createdAt,
+    updated_at: newRoot.updatedAt,
+  } as unknown as Folder;
+}
+
+// ---------------------------------------------------------------------------
+// createRunFolder
 // ---------------------------------------------------------------------------
 
 export async function createRunFolder(
@@ -60,19 +115,21 @@ export async function createRunFolder(
   const { format } = await import("date-fns");
   const baseSlug = formatDateSlug(runDate);
 
-  // Display name: "Feb 15 - Morning Run" or just "Feb 15" if no title
   const datePart = format(runDate, "MMM d");
   const name = runTitle ? `${datePart} - ${runTitle}` : datePart;
 
-  // Find a unique slug: run_2025-02-15, run_2025-02-15_1, run_2025-02-15_2, ...
-  const { data: existing } = await supabase
-    .from("folders")
-    .select("slug")
-    .eq("parent_id", rootId)
-    .like("slug", `${baseSlug}%`)
-    .eq("folder_type", "run");
+  const existing = await db
+    .select({ slug: foldersTable.slug })
+    .from(foldersTable)
+    .where(
+      and(
+        eq(foldersTable.parentId, rootId),
+        like(foldersTable.slug, `${baseSlug}%`),
+        eq(foldersTable.folderType, "run")
+      )
+    );
 
-  const existingSlugs = new Set((existing ?? []).map((f) => f.slug));
+  const existingSlugs = new Set(existing.map((f) => f.slug));
   let slug = baseSlug;
   let suffix = 1;
   while (existingSlugs.has(slug)) {
@@ -80,24 +137,24 @@ export async function createRunFolder(
     suffix++;
   }
 
-  const { data, error } = await supabase
-    .from("folders")
-    .insert({
-      parent_id: rootId,
+  const [inserted] = await db
+    .insert(foldersTable)
+    .values({
+      id: crypto.randomUUID(),
+      parentId: rootId,
       name,
       slug,
-      folder_type: "run",
-      run_id: runId,
-      created_by: createdBy,
+      folderType: "run",
+      runId: runId,
+      createdBy: createdBy,
     })
-    .select("id")
-    .single();
+    .returning({ id: foldersTable.id });
 
-  if (error || !data) {
-    throw new Error(`Failed to create run folder: ${error?.message}`);
+  if (!inserted) {
+    throw new Error(`Failed to create run folder`);
   }
 
-  return data.id;
+  return inserted.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,52 +162,40 @@ export async function createRunFolder(
 // ---------------------------------------------------------------------------
 
 export async function deleteRunFolder(runId: string): Promise<void> {
-  const { error } = await supabase
-    .from("folders")
-    .delete()
-    .eq("run_id", runId)
-    .eq("folder_type", "run");
-
-  if (error) {
-    throw new Error(`Failed to delete run folder: ${error.message}`);
-  }
+  await db
+    .delete(foldersTable)
+    .where(and(eq(foldersTable.runId, runId), eq(foldersTable.folderType, "run")));
 }
 
 // ---------------------------------------------------------------------------
-// getRunFolderId — find the folder for a given run
+// getRunFolderId
 // ---------------------------------------------------------------------------
 
 export async function getRunFolderId(runId: string): Promise<string | null> {
-  const { data } = await supabase
-    .from("folders")
-    .select("id")
-    .eq("run_id", runId)
-    .eq("folder_type", "run")
-    .single();
+  const folder = await db.query.folders.findFirst({
+    columns: { id: true },
+    where: and(eq(foldersTable.runId, runId), eq(foldersTable.folderType, "run")),
+  });
 
-  return data?.id ?? null;
+  return folder?.id ?? null;
 }
 
 // ---------------------------------------------------------------------------
-// linkPhotosToRunFolder — links all photos of a run to a folder
+// linkPhotosToRunFolder
 // ---------------------------------------------------------------------------
 
 export async function linkPhotosToRunFolder(
   runId: string,
   folderId: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from("photos")
-    .update({ folder_id: folderId })
-    .eq("run_id", runId);
-
-  if (error) {
-    throw new Error(`Failed to link photos to folder: ${error.message}`);
-  }
+  await db
+    .update(photosTable)
+    .set({ folderId: folderId })
+    .where(eq(photosTable.runId, runId));
 }
 
 // ---------------------------------------------------------------------------
-// linkPhotosToFolder — links specific photo IDs to a folder (for uploads)
+// linkPhotosToFolder
 // ---------------------------------------------------------------------------
 
 export async function linkPhotosToFolder(
@@ -159,36 +204,35 @@ export async function linkPhotosToFolder(
 ): Promise<void> {
   if (photoIds.length === 0) return;
 
-  const { error } = await supabase
-    .from("photos")
-    .update({ folder_id: folderId })
-    .in("id", photoIds);
-
-  if (error) {
-    throw new Error(`Failed to link photos to folder: ${error.message}`);
-  }
+  await db
+    .update(photosTable)
+    .set({ folderId: folderId })
+    .where(inArray(photosTable.id, photoIds));
 }
 
 // ---------------------------------------------------------------------------
-// getFolderChildren — lightweight: returns just subfolders (no photos)
+// getFolderChildren
 // ---------------------------------------------------------------------------
 
 export async function getFolderChildren(
   folderId: string
 ): Promise<FolderWithMeta[]> {
-  const { data: subfolders, error } = await supabase
-    .from("folders")
-    .select("*")
-    .eq("parent_id", folderId)
-    .order("name", { ascending: true });
+  const subfolders = await db
+    .select()
+    .from(foldersTable)
+    .where(eq(foldersTable.parentId, folderId))
+    .orderBy(foldersTable.name);
 
-  if (error) {
-    throw new Error(`Failed to fetch children: ${error.message}`);
-  }
+  const folders = subfolders.map(f => ({
+    ...f,
+    parent_id: f.parentId,
+    folder_type: f.folderType,
+    run_id: f.runId,
+    created_by: f.createdBy,
+    created_at: f.createdAt,
+    updated_at: f.updatedAt,
+  })) as unknown as Folder[];
 
-  const folders = (subfolders ?? []) as Folder[];
-
-  // Sort: run folders descending by slug (newest first), others alphabetical
   const sorted = [...folders].sort((a, b) => {
     if (a.folder_type === "run" && b.folder_type === "run") {
       return b.slug.localeCompare(a.slug);
@@ -212,23 +256,31 @@ export async function createCustomFolder(
 ): Promise<Folder> {
   const slug = normalizeSlug(name);
 
-  const { data, error } = await supabase
-    .from("folders")
-    .insert({
-      parent_id: parentId,
+  const [inserted] = await db
+    .insert(foldersTable)
+    .values({
+      id: crypto.randomUUID(),
+      parentId: parentId,
       name,
       slug,
-      folder_type: "custom",
-      created_by: createdBy,
+      folderType: "custom",
+      createdBy: createdBy,
     })
-    .select("*")
-    .single();
+    .returning();
 
-  if (error || !data) {
-    throw new Error(`Failed to create folder: ${error?.message}`);
+  if (!inserted) {
+    throw new Error(`Failed to create folder`);
   }
 
-  return data as Folder;
+  return {
+    ...inserted,
+    parent_id: inserted.parentId,
+    folder_type: inserted.folderType,
+    run_id: inserted.runId,
+    created_by: inserted.createdBy,
+    created_at: inserted.createdAt,
+    updated_at: inserted.updatedAt,
+  } as unknown as Folder;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,15 +290,31 @@ export async function createCustomFolder(
 export async function getBreadcrumbs(
   folderId: string
 ): Promise<BreadcrumbItem[]> {
-  const { data, error } = await supabase.rpc("get_folder_breadcrumbs", {
-    folder_id: folderId,
-  });
+  try {
+    // Recursive CTE for breadcrumbs in SQLite
+    const query = sql`
+      WITH RECURSIVE breadcrumbs AS (
+        SELECT id, parent_id, name, slug, folder_type, 0 as level
+        FROM folders
+        WHERE id = ${folderId}
+        
+        UNION ALL
+        
+        SELECT f.id, f.parent_id, f.name, f.slug, f.folder_type, b.level + 1
+        FROM folders f
+        JOIN breadcrumbs b ON f.id = b.parent_id
+      )
+      SELECT id, name, slug, folder_type
+      FROM breadcrumbs
+      ORDER BY level DESC
+    `;
 
-  if (error) {
+    const result = await db.run(query);
+    return result.rows as unknown as BreadcrumbItem[];
+  } catch (e) {
+    console.error("Breadcrumbs CTE failed, using fallback:", e);
     return getBreadcrumbsFallback(folderId);
   }
-
-  return (data as BreadcrumbItem[]) ?? [];
 }
 
 async function getBreadcrumbsFallback(
@@ -256,30 +324,27 @@ async function getBreadcrumbsFallback(
   let currentId: string | null = folderId;
 
   while (currentId) {
-    const result = await supabase
-      .from("folders")
-      .select("id, parent_id, name, slug, folder_type")
-      .eq("id", currentId)
-      .single();
-
-    if (result.error || !result.data) break;
-
-    const row = result.data as {
+    const row: {
       id: string;
-      parent_id: string | null;
+      parentId: string | null;
       name: string;
       slug: string;
-      folder_type: string;
-    };
+      folderType: string;
+    } | undefined = await db.query.folders.findFirst({
+      columns: { id: true, parentId: true, name: true, slug: true, folderType: true },
+      where: eq(foldersTable.id, currentId),
+    });
+
+    if (!row) break;
 
     crumbs.unshift({
       id: row.id,
       name: row.name,
       slug: row.slug,
-      folder_type: row.folder_type as BreadcrumbItem["folder_type"],
+      folder_type: row.folderType as BreadcrumbItem["folder_type"],
     });
 
-    currentId = row.parent_id;
+    currentId = row.parentId;
   }
 
   return crumbs;
@@ -292,53 +357,82 @@ async function getBreadcrumbsFallback(
 export async function getFolderContents(
   folderId: string
 ): Promise<FolderContents> {
-  const [folderResult, subfoldersResult, photosResult] = await Promise.all([
-    supabase.from("folders").select("*").eq("id", folderId).single(),
-    supabase
-      .from("folders")
-      .select("*")
-      .eq("parent_id", folderId)
-      .order("slug", { ascending: true }),
-    supabase
-      .from("photos")
-      .select("*, uploader:uploaded_by(id, name, avatar_url)")
-      .eq("folder_id", folderId)
-      .order("display_order", { ascending: true }),
+  const [folder, rawSubfolders, photos] = await Promise.all([
+    db.query.folders.findFirst({ where: eq(foldersTable.id, folderId) }),
+    db
+      .select()
+      .from(foldersTable)
+      .where(eq(foldersTable.parentId, folderId))
+      .orderBy(foldersTable.slug),
+    db
+      .select({
+        id: photosTable.id,
+        runId: photosTable.runId,
+        folderId: photosTable.folderId,
+        storagePath: photosTable.storagePath,
+        fileName: photosTable.fileName,
+        fileSize: photosTable.fileSize,
+        mimeType: photosTable.mimeType,
+        displayOrder: photosTable.displayOrder,
+        uploadedBy: photosTable.uploadedBy,
+        createdAt: photosTable.createdAt,
+        uploader: {
+          id: usersTable.id,
+          name: usersTable.name,
+          avatar_url: usersTable.avatarUrl,
+        },
+      })
+      .from(photosTable)
+      .leftJoin(usersTable, eq(photosTable.uploadedBy, usersTable.id))
+      .where(eq(photosTable.folderId, folderId))
+      .orderBy(photosTable.displayOrder),
   ]);
 
-  if (folderResult.error || !folderResult.data) {
-    throw new Error(
-      `Folder not found: ${folderResult.error?.message ?? folderId}`
-    );
+  if (!folder) {
+    throw new Error(`Folder not found: ${folderId}`);
   }
 
-  if (subfoldersResult.error) {
-    throw new Error(
-      `Failed to fetch subfolders: ${subfoldersResult.error.message}`
-    );
-  }
+  const folderData = {
+    ...folder,
+    parent_id: folder.parentId,
+    folder_type: folder.folderType,
+    run_id: folder.runId,
+    created_by: folder.createdBy,
+    created_at: folder.createdAt,
+    updated_at: folder.updatedAt,
+  } as unknown as Folder;
 
-  if (photosResult.error) {
-    throw new Error(
-      `Failed to fetch photos: ${photosResult.error.message}`
-    );
-  }
+  const subfoldersData = rawSubfolders.map(f => ({
+    ...f,
+    parent_id: f.parentId,
+    folder_type: f.folderType,
+    run_id: f.runId,
+    created_by: f.createdBy,
+    created_at: f.createdAt,
+    updated_at: f.updatedAt,
+  })) as unknown as Folder[];
 
-  const folder = folderResult.data as Folder;
-  const rawSubfolders = (subfoldersResult.data ?? []) as Folder[];
-  const photos = (photosResult.data ?? []) as Photo[];
-
-  const sortedSubfolders = sortSubfolders(rawSubfolders, folder.folder_type);
-  const subfolders = await enrichSubfolders(sortedSubfolders);
+  const sortedSubfolders = sortSubfolders(subfoldersData, folderData.folder_type);
+  const enrichedSubfolders = await enrichSubfolders(sortedSubfolders);
 
   const photosWithUrls = await Promise.all(
     photos.map(async (photo) => ({
-      ...photo,
-      url: await getDownloadUrl(photo.storage_path),
-    }))
+      id: photo.id,
+      run_id: photo.runId,
+      folder_id: photo.folderId,
+      storage_path: photo.storagePath,
+      file_name: photo.fileName,
+      file_size: photo.fileSize,
+      mime_type: photo.mimeType,
+      display_order: photo.displayOrder,
+      uploaded_by: photo.uploadedBy,
+      created_at: photo.createdAt,
+      uploader: photo.uploader,
+      url: await getDownloadUrl(photo.storagePath),
+    } as unknown as Photo))
   );
 
-  return { folder, subfolders, photos: photosWithUrls };
+  return { folder: folderData, subfolders: enrichedSubfolders, photos: photosWithUrls };
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +442,6 @@ export async function getFolderContents(
 function sortSubfolders(folders: Folder[], parentType: string): Folder[] {
   return [...folders].sort((a, b) => {
     if (parentType === "root") {
-      // Run folders descending by slug (newest first), then custom alphabetical
       if (a.folder_type === "run" && b.folder_type === "run") {
         return b.slug.localeCompare(a.slug);
       }
@@ -361,7 +454,7 @@ function sortSubfolders(folders: Folder[], parentType: string): Folder[] {
 }
 
 // ---------------------------------------------------------------------------
-// Enrich subfolders with item_count and preview_url
+// Enrich subfolders
 // ---------------------------------------------------------------------------
 
 async function enrichSubfolders(
@@ -370,19 +463,18 @@ async function enrichSubfolders(
   return Promise.all(
     folders.map(async (folder) => {
       const [subfolderCount, photoCount, previewPhoto] = await Promise.all([
-        supabase
-          .from("folders")
-          .select("id", { count: "exact", head: true })
-          .eq("parent_id", folder.id),
-        supabase
-          .from("photos")
-          .select("id", { count: "exact", head: true })
-          .eq("folder_id", folder.id),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(foldersTable)
+          .where(eq(foldersTable.parentId, folder.id)),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(photosTable)
+          .where(eq(photosTable.folderId, folder.id)),
         getPreviewPhoto(folder),
       ]);
 
-      const itemCount =
-        (subfolderCount.count ?? 0) + (photoCount.count ?? 0);
+      const itemCount = (subfolderCount[0]?.count ?? 0) + (photoCount[0]?.count ?? 0);
 
       return {
         ...folder,
@@ -394,42 +486,36 @@ async function enrichSubfolders(
 }
 
 // ---------------------------------------------------------------------------
-// Get a preview photo URL for a folder
+// Get preview photo
 // ---------------------------------------------------------------------------
 
 async function getPreviewPhoto(folder: Folder): Promise<string | null> {
-  // Direct photos in this folder
-  const { data } = await supabase
-    .from("photos")
-    .select("storage_path")
-    .eq("folder_id", folder.id)
-    .order("display_order", { ascending: true })
-    .limit(1);
+  const photo = await db.query.photos.findFirst({
+    columns: { storagePath: true },
+    where: eq(photosTable.folderId, folder.id),
+    orderBy: [photosTable.displayOrder],
+  });
 
-  if (data?.[0]) {
-    return getDownloadUrl(data[0].storage_path);
+  if (photo) {
+    return getDownloadUrl(photo.storagePath);
   }
 
-  // For custom folders, check child folders
   if (folder.folder_type === "custom") {
-    const { data: childFolders } = await supabase
-      .from("folders")
-      .select("id")
-      .eq("parent_id", folder.id)
+    const childFolders = await db
+      .select({ id: foldersTable.id })
+      .from(foldersTable)
+      .where(eq(foldersTable.parentId, folder.id))
       .limit(5);
 
-    if (childFolders) {
-      for (const child of childFolders) {
-        const { data: childPhoto } = await supabase
-          .from("photos")
-          .select("storage_path")
-          .eq("folder_id", child.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
+    for (const child of childFolders) {
+      const childPhoto = await db.query.photos.findFirst({
+        columns: { storagePath: true },
+        where: eq(photosTable.folderId, child.id),
+        orderBy: [desc(photosTable.createdAt)],
+      });
 
-        if (childPhoto?.[0]) {
-          return getDownloadUrl(childPhoto[0].storage_path);
-        }
+      if (childPhoto) {
+        return getDownloadUrl(childPhoto.storagePath);
       }
     }
   }
@@ -438,89 +524,201 @@ async function getPreviewPhoto(folder: Folder): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
-// migrateExistingRuns — rebuilds folder structure with flat hierarchy
+// getRecentCustomFolderPhotos
+// ---------------------------------------------------------------------------
+
+const FOLDER_PHOTO_LIMIT = 6;
+
+export async function getRecentCustomFolderPhotos(): Promise<{
+  folder: Folder;
+  photos: Photo[];
+  total_count: number;
+}[]> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const root = await getRootFolder();
+
+  const customFolders = await db
+    .select()
+    .from(foldersTable)
+    .where(and(eq(foldersTable.parentId, root.id), eq(foldersTable.folderType, "custom")))
+    .orderBy(desc(foldersTable.updatedAt));
+
+  const results = await Promise.all(
+    customFolders.map(async (folder) => {
+      const [photos, [{ count: total }]] = await Promise.all([
+        db.select().from(photosTable)
+          .where(eq(photosTable.folderId, folder.id))
+          .orderBy(desc(photosTable.createdAt))
+          .limit(FOLDER_PHOTO_LIMIT),
+        db.select({ count: sql<number>`count(*)` })
+          .from(photosTable)
+          .where(eq(photosTable.folderId, folder.id)),
+      ]);
+
+      const photosWithUrls: Photo[] = await Promise.all(
+        photos.map(async (p) => ({
+          id: p.id,
+          run_id: p.runId ?? "",
+          folder_id: p.folderId,
+          storage_path: p.storagePath,
+          file_name: p.fileName,
+          file_size: p.fileSize,
+          mime_type: p.mimeType,
+          display_order: p.displayOrder,
+          uploaded_by: p.uploadedBy,
+          created_at: p.createdAt,
+          url: await getDownloadUrl(p.storagePath),
+        } as Photo))
+      );
+
+      const folderMapped: Folder = {
+        id: folder.id,
+        parent_id: folder.parentId,
+        name: folder.name,
+        slug: folder.slug,
+        folder_type: folder.folderType as Folder["folder_type"],
+        run_id: folder.runId,
+        created_by: folder.createdBy,
+        created_at: folder.createdAt,
+        updated_at: folder.updatedAt,
+      } as unknown as Folder;
+
+      return {
+        folder: folderMapped,
+        photos: photosWithUrls,
+        total_count: Number(total),
+      };
+    })
+  );
+
+  return results.filter((r) => r.total_count > 0);
+}
+
+// ---------------------------------------------------------------------------
+// deleteFolder
+// ---------------------------------------------------------------------------
+
+async function getDescendantFolderIds(rootId: string): Promise<string[]> {
+  const query = sql`
+    WITH RECURSIVE descendants AS (
+      SELECT id FROM folders WHERE id = ${rootId}
+      UNION ALL
+      SELECT f.id FROM folders f JOIN descendants d ON f.parent_id = d.id
+    )
+    SELECT id FROM descendants
+  `;
+  try {
+    const result = await db.run(query);
+    return (result.rows as unknown as { id: string }[]).map(r => r.id);
+  } catch {
+    const ids = [rootId];
+    const queue = [rootId];
+    while (queue.length) {
+      const pid = queue.shift()!;
+      const children = await db
+        .select({ id: foldersTable.id })
+        .from(foldersTable)
+        .where(eq(foldersTable.parentId, pid));
+      for (const c of children) { ids.push(c.id); queue.push(c.id); }
+    }
+    return ids;
+  }
+}
+
+export async function deleteFolder(folderId: string): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const folder = await db.query.folders.findFirst({
+    where: eq(foldersTable.id, folderId),
+  });
+  if (!folder) throw new Error("Folder not found");
+  if (folder.folderType !== "custom") throw new Error("Only custom folders can be deleted");
+  if (folder.createdBy !== session.user.id && session.user.role !== "admin") {
+    throw new Error("Forbidden");
+  }
+
+  const folderIds = await getDescendantFolderIds(folderId);
+
+  const photos = await db
+    .select({ storagePath: photosTable.storagePath })
+    .from(photosTable)
+    .where(inArray(photosTable.folderId, folderIds));
+
+  if (photos.length > 0) {
+    await Promise.all(photos.map(p => deleteObject(p.storagePath)));
+    await db.delete(photosTable).where(inArray(photosTable.folderId, folderIds));
+  }
+
+  await db.delete(foldersTable).where(eq(foldersTable.id, folderId));
+}
+
+// ---------------------------------------------------------------------------
+// migrateExistingRuns
 // ---------------------------------------------------------------------------
 
 export async function migrateExistingRuns(): Promise<{
   migrated: number;
   skipped: number;
 }> {
-  let root: Folder;
-  const { data: existingRoot } = await supabase
-    .from("folders")
-    .select("*")
-    .eq("folder_type", "root")
-    .single();
+  let root = await db.query.folders.findFirst({
+    where: eq(foldersTable.folderType, "root"),
+  });
 
-  if (existingRoot) {
-    root = existingRoot as Folder;
-  } else {
-    const { data: admin } = await supabase
-      .from("users")
-      .select("id")
-      .eq("role", "admin")
-      .limit(1)
-      .single();
+  if (!root) {
+    const admin = await db.query.users.findFirst({
+      where: eq(usersTable.role, "admin"),
+    });
 
     if (!admin) {
       throw new Error("No admin user found to create root folder");
     }
 
-    const { data: newRoot, error: rootError } = await supabase
-      .from("folders")
-      .insert({
-        parent_id: null,
+    const [newRoot] = await db
+      .insert(foldersTable)
+      .values({
+        id: crypto.randomUUID(),
+        parentId: null,
         name: "Vault",
         slug: "vault",
-        folder_type: "root",
-        created_by: admin.id,
+        folderType: "root",
+        createdBy: admin.id,
       })
-      .select("*")
-      .single();
-
-    if (rootError || !newRoot) {
-      throw new Error(`Failed to create root folder: ${rootError?.message}`);
-    }
-
-    root = newRoot as Folder;
+      .returning();
+    
+    root = newRoot;
   }
 
-  const { data: runs, error: runsError } = await supabase
-    .from("runs")
-    .select("id, run_date, title, created_by")
-    .order("run_date", { ascending: true });
-
-  if (runsError) {
-    throw new Error(`Failed to fetch runs: ${runsError.message}`);
-  }
+  const runs = await db
+    .select()
+    .from(runsTable)
+    .orderBy(runsTable.runDate);
 
   let migrated = 0;
   let skipped = 0;
 
-  for (const run of runs ?? []) {
-    const { data: existingFolder } = await supabase
-      .from("folders")
-      .select("id")
-      .eq("run_id", run.id)
-      .eq("folder_type", "run")
-      .single();
+  for (const run of runs) {
+    const existingFolder = await db.query.folders.findFirst({
+      where: and(eq(foldersTable.runId, run.id), eq(foldersTable.folderType, "run")),
+    });
 
     if (existingFolder) {
       skipped++;
       continue;
     }
 
-    const runDate = new Date(run.run_date);
+    const runDate = new Date(run.runDate);
     const folderId = await createRunFolder(
-      root.id,
+      root!.id,
       run.id,
       run.title,
       runDate,
-      run.created_by
+      run.createdBy
     );
 
     await linkPhotosToRunFolder(run.id, folderId);
-
     migrated++;
   }
 

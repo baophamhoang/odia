@@ -20,7 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { TimelineSkeleton } from "@/components/skeleton";
-import type { RunCard } from "@/app/lib/types";
+import { PhotoViewer } from "@/components/photo-viewer";
+import type { RunCard, Photo } from "@/app/lib/types";
 
 interface TimelineViewProps {
   runs: RunCard[];
@@ -33,6 +34,7 @@ export function TimelineView({ runs, isLoading, isRefreshing }: TimelineViewProp
     startOfMonth(new Date())
   );
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<{ photos: Photo[]; index: number; runLink: string } | null>(null);
 
   const runsByDate = useMemo(() => {
     const map = new Map<string, RunCard[]>();
@@ -213,18 +215,13 @@ export function TimelineView({ runs, isLoading, isRefreshing }: TimelineViewProp
                 {format(parseISO(expandedDate), "EEEE, MMMM d")}
               </h2>
               <div className="space-y-6">
-                {runsByDate.get(expandedDate)!.map((run) => (
-                  <Link
-                    key={run.id}
-                    href={`/runs/${run.id}`}
-                    className="block group"
-                  >
-                    <div className="space-y-3">
+                {runsByDate.get(expandedDate)!.map((run) => {
+                  const runPhotos = run.photos;
+                  return (
+                    <div key={run.id} className="space-y-3">
                       <div className="flex items-center gap-3">
                         {run.title && (
-                          <span className="font-medium group-hover:text-white transition-colors">
-                            {run.title}
-                          </span>
+                          <span className="font-medium">{run.title}</span>
                         )}
                         {run.location && (
                           <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -236,23 +233,36 @@ export function TimelineView({ runs, isLoading, isRefreshing }: TimelineViewProp
                           {run.photo_count} photo
                           {run.photo_count !== 1 ? "s" : ""}
                         </span>
+                        <Link
+                          href={`/runs/${run.id}`}
+                          className="text-xs text-primary hover:underline shrink-0"
+                        >
+                          View run →
+                        </Link>
                       </div>
 
-                      {run.photos.length > 0 && (
+                      {runPhotos.length > 0 && (
                         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
-                          {run.photos.map((photo) => (
-                            <div
+                          {runPhotos.map((photo, photoIndex) => (
+                            <button
                               key={photo.id}
-                              className="relative h-28 w-28 sm:h-36 sm:w-36 shrink-0 rounded-xl overflow-hidden"
+                              onClick={() =>
+                                setViewer({
+                                  photos: runPhotos,
+                                  index: photoIndex,
+                                  runLink: `/runs/${run.id}`,
+                                })
+                              }
+                              className="relative h-28 w-28 sm:h-36 sm:w-36 shrink-0 rounded-xl overflow-hidden cursor-pointer"
                             >
                               <Image
                                 src={photo.url ?? ""}
                                 alt=""
                                 fill
-                                className="object-cover group-hover:scale-105 transition-transform duration-500"
+                                className="object-cover hover:scale-105 transition-transform duration-500"
                                 sizes="144px"
                               />
-                            </div>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -271,8 +281,8 @@ export function TimelineView({ runs, isLoading, isRefreshing }: TimelineViewProp
                         </div>
                       )}
                     </div>
-                  </Link>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </motion.div>
@@ -286,6 +296,15 @@ export function TimelineView({ runs, isLoading, isRefreshing }: TimelineViewProp
             Upload photos from the vault to see them here
           </p>
         </div>
+      )}
+
+      {viewer && (
+        <PhotoViewer
+          photos={viewer.photos}
+          initialIndex={viewer.index}
+          onClose={() => setViewer(null)}
+          runLink={viewer.runLink}
+        />
       )}
     </div>
   );

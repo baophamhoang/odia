@@ -4,9 +4,9 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
-  avatar_url: string | null;
+  avatar_url?: string | null;
   role: UserRole;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface Run {
@@ -17,14 +17,15 @@ export interface Run {
   location: string | null;
   hashtags: string[];
   created_by: string;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 export interface RunWithDetails extends Run {
   creator: User;
   participants: User[];
   photos: Photo[];
+  folder_id?: string | null;
 }
 
 export interface RunCard extends Run {

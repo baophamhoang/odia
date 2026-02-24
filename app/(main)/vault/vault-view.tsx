@@ -5,13 +5,16 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { format, parseISO } from "date-fns";
-import { Upload, MapPin, Camera, ArrowRight, Loader2 } from "lucide-react";
+import { Upload, MapPin, Camera, ArrowRight, Loader2, FolderOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { RunCardGridSkeleton } from "@/components/skeleton";
 import { FolderExplorer } from "@/components/vault/folder-explorer";
 import type { RunCard } from "@/app/lib/types";
+import type { FolderPhotoGroup } from "@/app/lib/api";
+
+const FOLDER_PHOTO_LIMIT = 6;
 
 interface VaultViewProps {
   runs: RunCard[];
@@ -20,6 +23,7 @@ interface VaultViewProps {
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   initialFolderId?: string | null;
+  folderGroups?: FolderPhotoGroup[];
 }
 
 export function VaultView({
@@ -29,6 +33,7 @@ export function VaultView({
   activeTab = "recent",
   onTabChange,
   initialFolderId,
+  folderGroups = [],
 }: VaultViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -324,8 +329,64 @@ export function VaultView({
             </div>
           )}
 
+          {/* Custom folder photos */}
+          {!isLoading && folderGroups.length > 0 && (
+            <div className="mt-10">
+              <div className="flex items-center justify-between mb-5">
+                <span className="text-sm text-muted-foreground font-medium">
+                  From other folders
+                </span>
+                <Link
+                  href="/vault?tab=folders"
+                  className="group flex items-center gap-1.5 text-sm text-muted-foreground/70 hover:text-foreground transition-colors"
+                >
+                  View folders <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              </div>
+              <div className="flex flex-col gap-6">
+                {folderGroups.map((group) => (
+                  <div key={group.folder.id}>
+                    <div className="flex items-center justify-between mb-3">
+                      <Link
+                        href={`/vault?tab=folders&folderId=${group.folder.id}`}
+                        className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/80"
+                      >
+                        <FolderOpen className="h-4 w-4 text-muted-foreground/60" />
+                        {group.folder.name}
+                      </Link>
+                      {group.total_count > FOLDER_PHOTO_LIMIT && (
+                        <Link
+                          href={`/vault?tab=folders&folderId=${group.folder.id}`}
+                          className="text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
+                        >
+                          View all {group.total_count} →
+                        </Link>
+                      )}
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                      {group.photos.map((photo) => (
+                        <div
+                          key={photo.id}
+                          className="relative shrink-0 h-24 w-24 rounded-xl overflow-hidden bg-muted/20"
+                        >
+                          <Image
+                            src={photo.url ?? ""}
+                            alt={photo.file_name ?? ""}
+                            fill
+                            className="object-cover"
+                            sizes="96px"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Empty state */}
-          {!isLoading && runs.length === 0 && (
+          {!isLoading && runs.length === 0 && folderGroups.length === 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

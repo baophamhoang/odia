@@ -1,7 +1,9 @@
 "use server";
 
 import { auth } from "@/app/lib/auth";
-import { supabase } from "@/app/lib/db";
+import { db } from "@/app/lib/db";
+import { allowedEmails as allowedEmailsTable, users as usersTable } from "@/app/lib/schema";
+import { eq, inArray, desc, ne } from "drizzle-orm";
 import { WHITELIST_BYPASS_EMAIL } from "@/app/lib/constants";
 import type { AllowedEmail, User, UserRole } from "@/app/lib/types";
 
@@ -13,7 +15,7 @@ async function requireAdminSession() {
 }
 
 // ---------------------------------------------------------------------------
-// getAllowedEmails — returns whitelist with joined user info
+// getAllowedEmails
 // ---------------------------------------------------------------------------
 
 export interface AllowedEmailWithUser extends AllowedEmail {
@@ -27,37 +29,45 @@ export interface AccessControlSettings {
 export async function getAllowedEmails(): Promise<AllowedEmailWithUser[]> {
   await requireAdminSession();
 
-  const { data: emails, error } = await supabase
-    .from("allowed_emails")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const emails = await db
+    .select()
+    .from(allowedEmailsTable)
+    .where(ne(allowedEmailsTable.email, WHITELIST_BYPASS_EMAIL))
+    .orderBy(desc(allowedEmailsTable.createdAt));
 
-  if (error) throw new Error(`Failed to fetch allowed emails: ${error.message}`);
+  if (emails.length === 0) return [];
 
-  const visibleEmails = (emails ?? []).filter(
-    (e) => e.email !== WHITELIST_BYPASS_EMAIL
-  );
-  if (visibleEmails.length === 0) return [];
-
-  const emailAddresses = visibleEmails.map((e) => e.email);
-  const { data: users, error: usersError } = await supabase
-    .from("users")
-    .select("id, email, name, avatar_url, role")
-    .in("email", emailAddresses);
-
-  if (usersError) throw new Error(`Failed to fetch users: ${usersError.message}`);
+  const emailAddresses = emails.map((e) => e.email);
+  const users = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      name: usersTable.name,
+      avatarUrl: usersTable.avatarUrl,
+      role: usersTable.role,
+    })
+    .from(usersTable)
+    .where(inArray(usersTable.email, emailAddresses));
 
   const usersByEmail = new Map(
-    (users ?? []).map((u) => [
+    users.map((u) => [
       u.email,
-      u as Pick<User, "id" | "name" | "avatar_url" | "role">,
+      {
+        id: u.id,
+        name: u.name,
+        avatar_url: u.avatarUrl,
+        role: u.role as UserRole,
+      },
     ])
   );
 
-  return visibleEmails.map((email) => ({
-    ...(email as AllowedEmail),
+  return emails.map((email) => ({
+    id: email.id,
+    email: email.email,
+    added_by: email.addedBy,
+    created_at: email.createdAt,
     user: usersByEmail.get(email.email) ?? null,
-  }));
+  })) as AllowedEmailWithUser[];
 }
 
 // ---------------------------------------------------------------------------
@@ -67,19 +77,12 @@ export async function getAllowedEmails(): Promise<AllowedEmailWithUser[]> {
 export async function getAccessControlSettings(): Promise<AccessControlSettings> {
   await requireAdminSession();
 
-  const { data, error } = await supabase
-    .from("allowed_emails")
-    .select("id")
-    .eq("email", WHITELIST_BYPASS_EMAIL)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to fetch access settings: ${error.message}`);
-  }
+  const marker = await db.query.allowedEmails.findFirst({
+    where: eq(allowedEmailsTable.email, WHITELIST_BYPASS_EMAIL),
+  });
 
   return {
-    // Marker present => whitelist disabled
-    whitelistEnabled: !data,
+    whitelistEnabled: !marker,
   };
 }
 
@@ -91,34 +94,27 @@ export async function setWhitelistEnabled(enabled: boolean): Promise<void> {
   await requireAdminSession();
 
   if (enabled) {
-    const { error } = await supabase
-      .from("allowed_emails")
-      .delete()
-      .eq("email", WHITELIST_BYPASS_EMAIL);
-    if (error) {
-      throw new Error(`Failed to update access settings: ${error.message}`);
-    }
+    await db
+      .delete(allowedEmailsTable)
+      .where(eq(allowedEmailsTable.email, WHITELIST_BYPASS_EMAIL));
     return;
   }
 
-  const { error } = await supabase.from("allowed_emails").upsert(
-    {
+  await db
+    .insert(allowedEmailsTable)
+    .values({
+      id: crypto.randomUUID(),
       email: WHITELIST_BYPASS_EMAIL,
-      added_by: null,
-    },
-    {
-      onConflict: "email",
-      ignoreDuplicates: false,
-    }
-  );
-
-  if (error) {
-    throw new Error(`Failed to update access settings: ${error.message}`);
-  }
+      addedBy: null,
+    })
+    .onConflictDoUpdate({
+      target: allowedEmailsTable.email,
+      set: { addedBy: null },
+    });
 }
 
 // ---------------------------------------------------------------------------
-// addAllowedEmail — just adds to the whitelist, no role
+// addAllowedEmail
 // ---------------------------------------------------------------------------
 
 export async function addAllowedEmail(email: string): Promise<void> {
@@ -129,19 +125,23 @@ export async function addAllowedEmail(email: string): Promise<void> {
     throw new Error("This email is reserved for system access control");
   }
 
-  const { error } = await supabase.from("allowed_emails").insert({
-    email: normalizedEmail,
-    added_by: session.user.id,
-  });
-
-  if (error) {
-    if (error.code === "23505") throw new Error("This email is already on the whitelist");
-    throw new Error(`Failed to add email: ${error.message}`);
+  try {
+    await db.insert(allowedEmailsTable).values({
+      id: crypto.randomUUID(),
+      email: normalizedEmail,
+      addedBy: session.user.id,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("UNIQUE constraint failed")) {
+      throw new Error("This email is already on the whitelist");
+    }
+    throw new Error(`Failed to add email: ${msg}`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// updateUserRole — changes role on users table only
+// updateUserRole
 // ---------------------------------------------------------------------------
 
 export async function updateUserRole(
@@ -154,12 +154,10 @@ export async function updateUserRole(
     throw new Error("You cannot change your own role");
   }
 
-  const { error } = await supabase
-    .from("users")
-    .update({ role })
-    .eq("id", userId);
-
-  if (error) throw new Error(`Failed to update user role: ${error.message}`);
+  await db
+    .update(usersTable)
+    .set({ role })
+    .where(eq(usersTable.id, userId));
 }
 
 // ---------------------------------------------------------------------------
@@ -169,25 +167,21 @@ export async function updateUserRole(
 export async function removeAllowedEmail(emailId: string): Promise<void> {
   const session = await requireAdminSession();
 
-  const { data: emailRow, error: fetchError } = await supabase
-    .from("allowed_emails")
-    .select("email")
-    .eq("id", emailId)
-    .single();
+  const emailRow = await db.query.allowedEmails.findFirst({
+    where: eq(allowedEmailsTable.id, emailId),
+  });
 
-  if (fetchError || !emailRow) throw new Error(`Email not found: ${fetchError?.message}`);
+  if (!emailRow) throw new Error(`Email not found`);
 
   // Prevent self-removal
-  const { data: currentUser } = await supabase
-    .from("users")
-    .select("email")
-    .eq("id", session.user.id)
-    .single();
+  const currentUser = await db.query.users.findFirst({
+    columns: { email: true },
+    where: eq(usersTable.id, session.user.id),
+  });
 
   if (currentUser && currentUser.email === emailRow.email) {
     throw new Error("You cannot remove your own email from the whitelist");
   }
 
-  const { error } = await supabase.from("allowed_emails").delete().eq("id", emailId);
-  if (error) throw new Error(`Failed to remove email: ${error.message}`);
+  await db.delete(allowedEmailsTable).where(eq(allowedEmailsTable.id, emailId));
 }

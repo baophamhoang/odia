@@ -1,7 +1,15 @@
 'use server';
 
 import { auth } from '@/app/lib/auth';
-import { supabase } from '@/app/lib/db';
+import { db } from '@/app/lib/db';
+import {
+  users as usersTable,
+  photos as photosTable,
+  runs as runsTable,
+  runParticipants,
+  folders as foldersTable,
+} from '@/app/lib/schema';
+import { eq, inArray, desc, sql } from 'drizzle-orm';
 import { getDownloadUrl, objectExists } from '@/app/lib/r2';
 import type { User, Photo, Run, RunCard, Folder } from '@/app/lib/types';
 
@@ -10,16 +18,8 @@ import type { User, Photo, Run, RunCard, Folder } from '@/app/lib/types';
 // ---------------------------------------------------------------------------
 
 export async function getTeamMembers(): Promise<User[]> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .order('name', { ascending: true });
-
-  if (error) {
-    throw new Error(`Failed to fetch team members: ${error.message}`);
-  }
-
-  return (data ?? []) as User[];
+  const members = await db.select().from(usersTable).orderBy(usersTable.name);
+  return members as User[];
 }
 
 // ---------------------------------------------------------------------------
@@ -34,46 +34,76 @@ export async function getMyUploadedPhotos(): Promise<
 
   const userId = session.user.id;
 
-  const { data: photos, error } = await supabase
-    .from('photos')
-    .select('*, runs(*), folders!folder_id(*)')
-    .eq('uploaded_by', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    throw new Error(`Failed to fetch uploaded photos: ${error.message}`);
-  }
+  const photos = await db
+    .select({
+      photo: photosTable,
+      run: runsTable,
+      folder: foldersTable,
+    })
+    .from(photosTable)
+    .leftJoin(runsTable, eq(photosTable.runId, runsTable.id))
+    .leftJoin(foldersTable, eq(photosTable.folderId, foldersTable.id))
+    .where(eq(photosTable.uploadedBy, userId))
+    .orderBy(desc(photosTable.createdAt));
 
   const results = await Promise.all(
-    (photos ?? []).map(async (row) => {
-      const { runs, folders, ...photoFields } = row as typeof row & {
-        runs: Run | null;
-        folders: Folder | null;
-      };
+    photos.map(async (row) => {
+      const { photo, run, folder } = row;
 
       // If this photo points to a deleted run (stale/orphaned row), hide it.
-      if (photoFields.run_id && !runs) {
+      if (photo.runId && !run) {
         return null;
       }
 
       // If object no longer exists in storage, hide it to avoid broken images.
-      const exists = await objectExists(photoFields.storage_path);
+      const exists = await objectExists(photo.storagePath);
       if (!exists) {
         return null;
       }
 
-      const url = await getDownloadUrl(photoFields.storage_path);
+      const url = await getDownloadUrl(photo.storagePath);
 
       return {
-        ...(photoFields as Photo),
+        id: photo.id,
+        run_id: photo.runId,
+        folder_id: photo.folderId,
+        storage_path: photo.storagePath,
+        file_name: photo.fileName,
+        file_size: photo.fileSize,
+        mime_type: photo.mimeType,
+        display_order: photo.displayOrder,
+        uploaded_by: photo.uploadedBy,
+        created_at: photo.createdAt,
         url,
-        run: runs ?? null,
-        folder: folders ?? null,
+        run: run
+          ? ({
+              ...run,
+              run_date: run.runDate,
+              created_by: run.createdBy,
+              created_at: run.createdAt,
+              updated_at: run.updatedAt,
+              hashtags: JSON.parse(run.hashtags ?? '[]'),
+            } as unknown as Run)
+          : null,
+        folder: folder
+          ? ({
+              ...folder,
+              parent_id: folder.parentId,
+              folder_type: folder.folderType,
+              run_id: folder.runId,
+              created_by: folder.createdBy,
+              created_at: folder.createdAt,
+              updated_at: folder.updatedAt,
+            } as unknown as Folder)
+          : null,
       };
     }),
   );
 
-  return results.filter(Boolean) as (Photo & { run: Run | null; folder: Folder | null })[];
+  return results.filter(Boolean) as (Photo & {
+    run: Run | null;
+    folder: Folder | null;
+  })[];
 }
 
 // ---------------------------------------------------------------------------
@@ -87,100 +117,94 @@ export async function getMyTaggedRuns(): Promise<RunCard[]> {
   const userId = session.user.id;
 
   // Find run ids where current user is a participant
-  const { data: participations, error: participationsError } = await supabase
-    .from('run_participants')
-    .select('run_id')
-    .eq('user_id', userId);
+  const participations = await db
+    .select({ runId: runParticipants.runId })
+    .from(runParticipants)
+    .where(eq(runParticipants.userId, userId));
 
-  if (participationsError) {
-    throw new Error(
-      `Failed to fetch participations: ${participationsError.message}`,
-    );
-  }
-
-  const runIds = (participations ?? []).map((p) => p.run_id as string);
+  const runIds = participations.map((p) => p.runId).filter(Boolean) as string[];
 
   if (runIds.length === 0) {
     return [];
   }
 
-  const { data: runs, error: runsError } = await supabase
-    .from('runs')
-    .select('*')
-    .in('id', runIds)
-    .order('run_date', { ascending: false });
+  const runs = await db
+    .select()
+    .from(runsTable)
+    .where(inArray(runsTable.id, runIds))
+    .orderBy(desc(runsTable.runDate));
 
-  if (runsError) {
-    throw new Error(`Failed to fetch tagged runs: ${runsError.message}`);
-  }
-
-  if (!runs || runs.length === 0) {
+  if (runs.length === 0) {
     return [];
   }
 
-  const creatorIds = [...new Set(runs.map((r) => r.created_by as string))];
+  const creatorIds = [...new Set(runs.map((r) => r.createdBy))];
 
-  const [
-    { data: creators, error: creatorsError },
-    { data: participants, error: participantsError },
-    { data: photos, error: photosError },
-    { data: photoCounts, error: photoCountsError },
-  ] = await Promise.all([
-    supabase.from('users').select('*').in('id', creatorIds),
-    supabase
-      .from('run_participants')
-      .select('run_id, users(*)')
-      .in('run_id', runIds),
-    supabase
-      .from('photos')
-      .select('*')
-      .in('run_id', runIds)
-      .order('display_order', { ascending: true }),
-    supabase.from('photos').select('run_id').in('run_id', runIds),
+  const [creators, participants, photos, photoCounts] = await Promise.all([
+    db.select().from(usersTable).where(inArray(usersTable.id, creatorIds)),
+    db
+      .select({
+        run_id: runParticipants.runId,
+        user: usersTable,
+      })
+      .from(runParticipants)
+      .innerJoin(usersTable, eq(runParticipants.userId, usersTable.id))
+      .where(inArray(runParticipants.runId, runIds)),
+    db
+      .select()
+      .from(photosTable)
+      .where(inArray(photosTable.runId, runIds))
+      .orderBy(photosTable.displayOrder),
+    db
+      .select({
+        run_id: photosTable.runId,
+        count: sql<number>`count(*)`,
+      })
+      .from(photosTable)
+      .where(inArray(photosTable.runId, runIds))
+      .groupBy(photosTable.runId),
   ]);
-
-  if (creatorsError)
-    throw new Error(`Failed to fetch creators: ${creatorsError.message}`);
-  if (participantsError)
-    throw new Error(
-      `Failed to fetch participants: ${participantsError.message}`,
-    );
-  if (photosError)
-    throw new Error(`Failed to fetch photos: ${photosError.message}`);
-  if (photoCountsError)
-    throw new Error(
-      `Failed to fetch photo counts: ${photoCountsError.message}`,
-    );
 
   // Index creators
   const creatorMap = new Map<string, User>(
-    (creators ?? []).map((u) => [u.id, u as User]),
+    creators.map((u) => [u.id, u as User]),
   );
 
   // Group participants by run
   const participantsByRun = new Map<string, User[]>();
-  for (const row of participants ?? []) {
+  for (const row of participants) {
+    if (!row.run_id) continue;
     const existing = participantsByRun.get(row.run_id) ?? [];
-    existing.push(row.users as unknown as User);
+    existing.push(row.user as User);
     participantsByRun.set(row.run_id, existing);
   }
 
-  // Count photos per run and collect preview (first 4)
+  // Index photo counts
   const photoCountByRun = new Map<string, number>();
-  const previewPhotosByRun = new Map<string, Photo[]>();
-
-  for (const photo of photoCounts ?? []) {
-    photoCountByRun.set(
-      photo.run_id,
-      (photoCountByRun.get(photo.run_id) ?? 0) + 1,
-    );
+  for (const row of photoCounts) {
+    if (row.run_id) {
+      photoCountByRun.set(row.run_id, row.count);
+    }
   }
 
-  for (const photo of photos ?? []) {
-    const existing = previewPhotosByRun.get(photo.run_id) ?? [];
+  // Collect preview (first 4)
+  const previewPhotosByRun = new Map<string, Photo[]>();
+  for (const photo of photos) {
+    if (!photo.runId) continue;
+    const existing = previewPhotosByRun.get(photo.runId) ?? [];
     if (existing.length < 4) {
-      existing.push(photo as Photo);
-      previewPhotosByRun.set(photo.run_id, existing);
+      existing.push({
+        id: photo.id,
+        run_id: photo.runId,
+        storage_path: photo.storagePath,
+        file_name: photo.fileName,
+        file_size: photo.fileSize,
+        mime_type: photo.mimeType,
+        display_order: photo.displayOrder,
+        uploaded_by: photo.uploadedBy,
+        created_at: photo.createdAt,
+      } as Photo);
+      previewPhotosByRun.set(photo.runId, existing);
     }
   }
 
@@ -199,11 +223,19 @@ export async function getMyTaggedRuns(): Promise<RunCard[]> {
   );
 
   return runs.map((run) => {
-    const creator = creatorMap.get(run.created_by);
+    const creator = creatorMap.get(run.createdBy);
     if (!creator) throw new Error(`Creator not found for run ${run.id}`);
 
     return {
-      ...(run as typeof run & { hashtags: string[] }),
+      id: run.id,
+      run_date: run.runDate,
+      title: run.title,
+      description: run.description,
+      location: run.location,
+      hashtags: JSON.parse(run.hashtags ?? '[]'),
+      created_by: run.createdBy,
+      created_at: run.createdAt,
+      updated_at: run.updatedAt,
       creator,
       participants: participantsByRun.get(run.id) ?? [],
       photos: signedPreviewsByRun.get(run.id) ?? [],
