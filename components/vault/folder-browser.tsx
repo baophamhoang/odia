@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { Footprints, Folder, LayoutGrid, Download, Loader2 } from "lucide-react";
+import { Footprints, Folder, LayoutGrid, Download, Loader2, Grid2X2, List } from "lucide-react";
 import { toast } from "sonner";
 import { useFolderContents } from "@/app/lib/api";
 import { FolderCard } from "@/components/vault/folder-card";
+import { FolderIcon } from "@/components/vault/folder-icon";
 import { FolderBrowserSkeleton } from "@/components/vault/folder-skeleton";
 import { PhotoGrid } from "@/components/photo-grid";
 import { deletePhoto } from "@/app/actions/photos";
@@ -13,6 +14,9 @@ import { motion } from "motion/react";
 import type { FolderWithMeta } from "@/app/lib/types";
 
 type FilterType = "all" | "runs" | "folders";
+type ViewMode = "card" | "icon";
+
+const VIEW_MODE_KEY = "vault-folder-view-mode";
 
 interface FolderBrowserProps {
   folderId: string | null;
@@ -24,7 +28,20 @@ export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderB
   const { data: session } = useSession();
   const { data: contents, isLoading } = useFolderContents(folderId);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Restore view mode from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem(VIEW_MODE_KEY) as ViewMode | null;
+    if (stored === "card" || stored === "icon") setViewMode(stored);
+  }, []);
+
+  function toggleViewMode() {
+    const next: ViewMode = viewMode === "card" ? "icon" : "card";
+    setViewMode(next);
+    localStorage.setItem(VIEW_MODE_KEY, next);
+  }
 
   async function handleBulkDownload() {
     if (!contents || contents.photos.length === 0) return;
@@ -81,27 +98,42 @@ export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderB
 
   return (
     <div>
-      {/* Filter bar */}
+      {/* Filter bar + view toggle */}
       {subfolders.length > 0 && (
-        <div className="flex items-center gap-1 mb-5">
-          <FilterButton
-            active={filter === "all"}
-            onClick={() => setFilter("all")}
-            icon={<LayoutGrid className="h-3.5 w-3.5" />}
-            label="All"
-          />
-          <FilterButton
-            active={filter === "runs"}
-            onClick={() => setFilter("runs")}
-            icon={<Footprints className="h-3.5 w-3.5" />}
-            label={`Runs (${runFolders.length})`}
-          />
-          <FilterButton
-            active={filter === "folders"}
-            onClick={() => setFilter("folders")}
-            icon={<Folder className="h-3.5 w-3.5" />}
-            label={`Folders (${customFolders.length})`}
-          />
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-1">
+            <FilterButton
+              active={filter === "all"}
+              onClick={() => setFilter("all")}
+              icon={<LayoutGrid className="h-3.5 w-3.5" />}
+              label="All"
+            />
+            <FilterButton
+              active={filter === "runs"}
+              onClick={() => setFilter("runs")}
+              icon={<Footprints className="h-3.5 w-3.5" />}
+              label={`Runs (${runFolders.length})`}
+            />
+            <FilterButton
+              active={filter === "folders"}
+              onClick={() => setFilter("folders")}
+              icon={<Folder className="h-3.5 w-3.5" />}
+              label={`Folders (${customFolders.length})`}
+            />
+          </div>
+
+          {/* View mode toggle */}
+          <button
+            onClick={toggleViewMode}
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground/60 hover:text-foreground transition-colors px-2 py-1.5 rounded-lg hover:bg-accent"
+            title={viewMode === "card" ? "Switch to icon view" : "Switch to card view"}
+          >
+            {viewMode === "card" ? (
+              <Grid2X2 className="h-3.5 w-3.5" />
+            ) : (
+              <List className="h-3.5 w-3.5" />
+            )}
+          </button>
         </div>
       )}
 
@@ -111,6 +143,7 @@ export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderB
           label={customFolders.length > 0 && filter === "all" ? "Runs" : undefined}
           folders={filteredRuns}
           onNavigate={onNavigate}
+          viewMode={viewMode}
         />
       )}
 
@@ -120,6 +153,7 @@ export function FolderBrowser({ folderId, onNavigate, onPhotosChanged }: FolderB
           label={runFolders.length > 0 && filter === "all" ? "Folders" : undefined}
           folders={filteredCustom}
           onNavigate={onNavigate}
+          viewMode={viewMode}
         />
       )}
 
@@ -184,10 +218,12 @@ function FolderSection({
   label,
   folders,
   onNavigate,
+  viewMode,
 }: {
   label?: string;
   folders: FolderWithMeta[];
   onNavigate?: (folderId: string) => void;
+  viewMode: ViewMode;
 }) {
   return (
     <div className="mb-8">
@@ -196,16 +232,41 @@ function FolderSection({
           {label}
         </h3>
       )}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {folders.map((folder, index) => (
-          <FolderCard
-            key={folder.id}
-            folder={folder}
-            index={index}
-            onClick={onNavigate}
-          />
-        ))}
-      </div>
+      {viewMode === "card" ? (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {folders.map((folder, index) => (
+            <FolderCard
+              key={folder.id}
+              folder={folder}
+              index={index}
+              onClick={onNavigate}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+          {folders.map((folder, index) => (
+            <motion.button
+              key={folder.id}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: index * 0.03 }}
+              onClick={() => onNavigate?.(folder.id)}
+              className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-accent/50 transition-colors group text-center"
+            >
+              <FolderIcon folderType={folder.folder_type} className="h-12 w-14" />
+              <div className="w-full">
+                <p className="text-xs font-medium text-foreground/80 truncate leading-tight">
+                  {folder.name}
+                </p>
+                <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                  {folder.item_count} item{folder.item_count !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -235,4 +296,3 @@ function FilterButton({
     </button>
   );
 }
-

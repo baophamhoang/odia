@@ -204,10 +204,16 @@ export async function linkPhotosToFolder(
 ): Promise<void> {
   if (photoIds.length === 0) return;
 
-  await db
-    .update(photosTable)
-    .set({ folderId: folderId })
-    .where(inArray(photosTable.id, photoIds));
+  await db.run(sql`
+    UPDATE photos
+    SET
+      folder_id = ${folderId},
+      run_id = COALESCE(
+        (SELECT run_id FROM folders WHERE id = ${folderId} AND run_id IS NOT NULL),
+        run_id
+      )
+    WHERE id IN (${sql.join(photoIds.map(id => sql`${id}`), sql`, `)})
+  `);
 }
 
 // ---------------------------------------------------------------------------
@@ -653,6 +659,82 @@ export async function deleteFolder(folderId: string): Promise<void> {
   }
 
   await db.delete(foldersTable).where(eq(foldersTable.id, folderId));
+}
+
+// ---------------------------------------------------------------------------
+// createShareToken
+// ---------------------------------------------------------------------------
+
+export async function createShareToken(folderId: string): Promise<string> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const folder = await db.query.folders.findFirst({
+    columns: { id: true, shareToken: true },
+    where: eq(foldersTable.id, folderId),
+  });
+
+  if (!folder) throw new Error("Folder not found");
+  if (folder.shareToken) return folder.shareToken;
+
+  const token = crypto.randomUUID().replace(/-/g, "");
+
+  await db
+    .update(foldersTable)
+    .set({ shareToken: token })
+    .where(eq(foldersTable.id, folderId));
+
+  return token;
+}
+
+// ---------------------------------------------------------------------------
+// getFolderByShareToken (public — no auth)
+// ---------------------------------------------------------------------------
+
+export async function getFolderByShareToken(token: string): Promise<{
+  folder: Folder;
+  photos: Photo[];
+} | null> {
+  const folder = await db.query.folders.findFirst({
+    where: eq(foldersTable.shareToken, token),
+  });
+
+  if (!folder) return null;
+
+  const folderData = {
+    ...folder,
+    parent_id: folder.parentId,
+    folder_type: folder.folderType,
+    run_id: folder.runId,
+    created_by: folder.createdBy,
+    created_at: folder.createdAt,
+    updated_at: folder.updatedAt,
+  } as unknown as Folder;
+
+  const rawPhotos = await db
+    .select()
+    .from(photosTable)
+    .where(eq(photosTable.folderId, folder.id))
+    .orderBy(photosTable.displayOrder)
+    .limit(50);
+
+  const photos: Photo[] = await Promise.all(
+    rawPhotos.map(async (p) => ({
+      id: p.id,
+      run_id: p.runId ?? "",
+      folder_id: p.folderId,
+      storage_path: p.storagePath,
+      file_name: p.fileName,
+      file_size: p.fileSize,
+      mime_type: p.mimeType,
+      display_order: p.displayOrder,
+      uploaded_by: p.uploadedBy,
+      created_at: p.createdAt ?? "",
+      url: await getDownloadUrl(p.storagePath),
+    } as Photo))
+  );
+
+  return { folder: folderData, photos };
 }
 
 // ---------------------------------------------------------------------------

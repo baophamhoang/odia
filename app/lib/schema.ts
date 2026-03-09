@@ -59,6 +59,7 @@ export const folders = sqliteTable("folders", {
   slug: text("slug").notNull(),
   folderType: text("folder_type", { enum: ["root", "run", "custom"] }).notNull().default("custom"),
   runId: text("run_id").references(() => runs.id, { onDelete: "set null" }),
+  shareToken: text("share_token").unique(),
   createdBy: text("created_by").notNull().references(() => users.id),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`),

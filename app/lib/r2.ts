@@ -49,6 +49,14 @@ export async function getDownloadUrl(storagePath: string): Promise<string> {
   return getSignedUrl(r2, command, { expiresIn: 3600 });
 }
 
+export function getResizedUrl(storagePath: string, width: number): string {
+  const base = process.env.R2_PUBLIC_URL;
+  if (!base) {
+    return `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${process.env.R2_BUCKET_NAME}/${storagePath}`;
+  }
+  return `${base}/cdn-cgi/image/width=${width},format=webp,quality=80/${storagePath}`;
+}
+
 export async function deleteObject(storagePath: string): Promise<void> {
   const command = new DeleteObjectCommand({
     Bucket: BUCKET,

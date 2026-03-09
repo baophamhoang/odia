@@ -178,6 +178,27 @@ export function VaultView({
             e.target.value = "";
           }}
         />
+        {/* Camera shortcut for iOS */}
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          id="vault-camera-input"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) {
+              const dt = new DataTransfer();
+              files.forEach((f) => dt.items.add(f));
+              const newEvent = new DragEvent("drop", {
+                dataTransfer: dt,
+                bubbles: true,
+              });
+              document.dispatchEvent(newEvent);
+            }
+            e.target.value = "";
+          }}
+        />
       </motion.div>
 
       {/* Tab switcher */}

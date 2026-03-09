@@ -263,12 +263,12 @@ export function PhotoGrid({
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{
-                    delay: index * 0.03,
+                    delay: Math.min(index * 0.015, 0.2),
                     duration: 0.4,
                     ease: [0.22, 1, 0.36, 1],
                   }}
                   onClick={() => setViewerIndex(index + 5)}
-                  className="relative aspect-square overflow-hidden bg-muted/10 cursor-pointer group rounded-lg"
+                  className="relative aspect-square overflow-hidden bg-muted/40 cursor-pointer group rounded-lg"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -278,6 +278,7 @@ export function PhotoGrid({
                     fill
                     className="object-cover transition-all duration-500 group-hover:brightness-110 group-hover:scale-[1.03]"
                     sizes="(max-width: 640px) 50vw, 33vw"
+                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
                 </motion.button>
@@ -294,12 +295,12 @@ export function PhotoGrid({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{
-                delay: index * 0.03,
+                delay: Math.min(index * 0.015, 0.2),
                 duration: 0.4,
                 ease: [0.22, 1, 0.36, 1],
               }}
               onClick={() => setViewerIndex(index)}
-              className="relative aspect-square overflow-hidden bg-muted/10 cursor-pointer group rounded-lg"
+              className="relative aspect-square overflow-hidden bg-muted/40 cursor-pointer group rounded-lg"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
@@ -309,6 +310,7 @@ export function PhotoGrid({
                 fill
                 className="object-cover transition-all duration-500 group-hover:brightness-110 group-hover:scale-[1.03]"
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                loading="lazy"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
             </motion.button>
@@ -355,11 +357,11 @@ function SimpleGrid({
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{
-            delay: index * 0.03,
+            delay: Math.min(index * 0.015, 0.2),
             duration: 0.4,
             ease: [0.22, 1, 0.36, 1],
           }}
-          className="relative aspect-square overflow-hidden bg-muted/10 group rounded-lg"
+          className="relative aspect-square overflow-hidden bg-muted/40 group rounded-lg"
           whileHover={{ scale: 1.02 }}
         >
           <button
@@ -372,6 +374,7 @@ function SimpleGrid({
               fill
               className="object-cover transition-all duration-500 group-hover:brightness-110 group-hover:scale-[1.03]"
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              loading="lazy"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
           </button>

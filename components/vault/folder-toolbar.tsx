@@ -2,9 +2,9 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { FolderPlus, Upload, ExternalLink, Loader2, Trash2, Link2 } from "lucide-react";
+import { FolderPlus, Upload, ExternalLink, Loader2, Trash2, Link2, Globe } from "lucide-react";
 import { toast } from "sonner";
-import { deleteFolder } from "@/app/actions/vault";
+import { deleteFolder, createShareToken } from "@/app/actions/vault";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +28,27 @@ interface FolderToolbarProps {
   onFolderDeleted?: () => void;
 }
 
+async function uploadWithConcurrency(
+  slots: { uploadUrl: string; photoId: string }[],
+  files: File[],
+  limit = 5
+) {
+  let i = 0;
+  const workers = Array(Math.min(limit, slots.length))
+    .fill(null)
+    .map(async () => {
+      while (i < slots.length) {
+        const idx = i++;
+        await fetch(slots[idx].uploadUrl, {
+          method: "PUT",
+          body: files[idx],
+          headers: { "Content-Type": files[idx].type },
+        });
+      }
+    });
+  await Promise.all(workers);
+}
+
 export function FolderToolbar({
   folderId,
   folderType,
@@ -43,13 +64,27 @@ export function FolderToolbar({
   const [uploading, setUploading] = useState(false);
   const [showDeleteFolder, setShowDeleteFolder] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleCopyLink() {
-    navigator.clipboard.writeText(
-      `${window.location.origin}/vault?tab=folders&folderId=${folderId}`
-    );
-    toast.success("Link copied!");
+  async function handleCopyTeamLink() {
+    const url = `${window.location.origin}/vault?tab=folders&folderId=${folderId}`;
+    await navigator.clipboard.writeText(url);
+    toast.success("Team link copied!");
+  }
+
+  async function handleSharePublicly() {
+    setSharing(true);
+    try {
+      const token = await createShareToken(folderId);
+      const url = `${window.location.origin}/s/${token}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("Public link copied!");
+    } catch {
+      toast.error("Failed to generate share link");
+    } finally {
+      setSharing(false);
+    }
   }
 
   const handleCreateFolder = async () => {
@@ -88,7 +123,6 @@ export function FolderToolbar({
 
   const handleUpload = async (fileList: FileList) => {
     if (fileList.length === 0) return;
-    // Copy to array immediately — FileList gets cleared when input resets
     const files = Array.from(fileList);
     setUploading(true);
     try {
@@ -99,18 +133,8 @@ export function FolderToolbar({
       }));
       const uploadSlots = await requestUploadUrls(fileInfos);
 
-      // Upload files to R2
-      await Promise.all(
-        uploadSlots.map(async (slot, i) => {
-          await fetch(slot.uploadUrl, {
-            method: "PUT",
-            body: files[i],
-            headers: { "Content-Type": files[i].type },
-          });
-        })
-      );
+      await uploadWithConcurrency(uploadSlots, files);
 
-      // Link photos to the current folder
       const photoIds = uploadSlots.map((s) => s.photoId);
       await fetch(`/api/vault/folders/${folderId}/upload`, {
         method: "POST",
@@ -118,8 +142,10 @@ export function FolderToolbar({
         body: JSON.stringify({ photoIds }),
       });
 
+      toast.success(`${files.length} photo${files.length !== 1 ? "s" : ""} uploaded`);
       onPhotosUploaded();
     } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
       console.error("Upload error:", e);
     } finally {
       setUploading(false);
@@ -152,9 +178,27 @@ export function FolderToolbar({
           {uploading ? "Uploading..." : "Upload Photos"}
         </Button>
 
-        <Button variant="outline" size="sm" onClick={handleCopyLink}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCopyTeamLink}
+        >
           <Link2 className="h-4 w-4" />
-          Copy Link
+          Copy Team Link
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSharePublicly}
+          disabled={sharing}
+        >
+          {sharing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Globe className="h-4 w-4" />
+          )}
+          Share Publicly
         </Button>
 
         {folderType === "run" && runId && (

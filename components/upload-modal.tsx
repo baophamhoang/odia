@@ -134,47 +134,55 @@ export function UploadModal({
     }));
     const uploadSlots = await requestUploadUrls(fileInfos);
 
-    await Promise.all(
-      uploadSlots.map(async (slot, index) => {
-        const file = files[index].file;
-        const xhr = new XMLHttpRequest();
+    // Concurrency-capped upload (max 5 parallel)
+    const CONCURRENCY = 5;
+    let slotIndex = 0;
+    const workers = Array(Math.min(CONCURRENCY, uploadSlots.length))
+      .fill(null)
+      .map(async () => {
+        while (slotIndex < uploadSlots.length) {
+          const index = slotIndex++;
+          const slot = uploadSlots[index];
+          const file = files[index].file;
+          const xhr = new XMLHttpRequest();
 
-        await new Promise<void>((resolve, reject) => {
-          xhr.upload.addEventListener("progress", (e) => {
-            if (e.lengthComputable) {
-              const pct = Math.round((e.loaded / e.total) * 100);
-              setFiles((prev) =>
-                prev.map((f, i) =>
-                  i === index ? { ...f, progress: pct } : f
-                )
-              );
-            }
+          await new Promise<void>((resolve, reject) => {
+            xhr.upload.addEventListener("progress", (e) => {
+              if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                setFiles((prev) =>
+                  prev.map((f, i) =>
+                    i === index ? { ...f, progress: pct } : f
+                  )
+                );
+              }
+            });
+
+            xhr.addEventListener("load", () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                setFiles((prev) =>
+                  prev.map((f, i) =>
+                    i === index ? { ...f, uploaded: true, progress: 100 } : f
+                  )
+                );
+                resolve();
+              } else {
+                reject(new Error(`Upload failed for ${file.name}`));
+              }
+            });
+
+            xhr.addEventListener("error", () =>
+              reject(new Error(`Upload failed for ${file.name}`))
+            );
+
+            xhr.open("PUT", slot.uploadUrl);
+            xhr.setRequestHeader("Content-Type", file.type);
+            xhr.send(file);
           });
+        }
+      });
 
-          xhr.addEventListener("load", () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              setFiles((prev) =>
-                prev.map((f, i) =>
-                  i === index ? { ...f, uploaded: true, progress: 100 } : f
-                )
-              );
-              resolve();
-            } else {
-              reject(new Error(`Upload failed for ${file.name}`));
-            }
-          });
-
-          xhr.addEventListener("error", () =>
-            reject(new Error(`Upload failed for ${file.name}`))
-          );
-
-          xhr.open("PUT", slot.uploadUrl);
-          xhr.setRequestHeader("Content-Type", file.type);
-          xhr.send(file);
-        });
-      })
-    );
-
+    await Promise.all(workers);
     return uploadSlots.map((s) => s.photoId);
   }
 
@@ -421,6 +429,15 @@ export function UploadModal({
                   <p className="font-semibold text-foreground/80">Drop your run photos</p>
                   <p className="text-xs text-muted-foreground/50 mt-1">or click to browse</p>
                 </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <label
+                    htmlFor="camera-capture-input"
+                    className="cursor-pointer text-[11px] font-medium text-primary/60 hover:text-primary transition-colors px-3 py-1 rounded-full border border-primary/20 hover:border-primary/40 sm:hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Take Photo
+                  </label>
+                </div>
               </motion.button>
             )}
             <input
@@ -429,6 +446,19 @@ export function UploadModal({
               accept="image/*"
               multiple
               className="hidden"
+              onChange={(e) => {
+                const newFiles = Array.from(e.target.files ?? []);
+                addFiles(newFiles);
+                e.target.value = "";
+              }}
+            />
+            {/* iOS camera shortcut — shown only on touch devices */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              id="camera-capture-input"
               onChange={(e) => {
                 const newFiles = Array.from(e.target.files ?? []);
                 addFiles(newFiles);
