@@ -102,6 +102,7 @@ export function PhotoGrid({
 
     return (
       <>
+        <div className={viewerIndex !== null ? "pointer-events-none" : undefined} style={viewerIndex !== null ? { transform: 'translateZ(0)' } : undefined}>
         <div className="space-y-8">
           {groups.map((group) => {
             const startOffset = flatOffset;
@@ -136,18 +137,18 @@ export function PhotoGrid({
             );
           })}
         </div>
+        </div>
 
-        {viewerIndex !== null && (
-          <PhotoViewer
-            photos={allPhotos}
-            initialIndex={viewerIndex}
-            onClose={() => setViewerIndex(null)}
-            canDeletePhoto={canDeletePhoto}
-            onDeletePhoto={onDeletePhoto}
-            folderLink={folderLink}
-            runLink={runLink}
-          />
-        )}
+        <PhotoViewer
+          open={viewerIndex !== null}
+          photos={allPhotos}
+          initialIndex={viewerIndex ?? 0}
+          onClose={() => setViewerIndex(null)}
+          canDeletePhoto={canDeletePhoto}
+          onDeletePhoto={onDeletePhoto}
+          folderLink={folderLink}
+          runLink={runLink}
+        />
 
         <Dialog
           open={!!pendingDelete}
@@ -199,48 +200,39 @@ export function PhotoGrid({
 
   return (
     <>
+      <div className={viewerIndex !== null ? "pointer-events-none" : undefined} style={viewerIndex !== null ? { transform: 'translateZ(0)' } : undefined}>
       {hasFeatured ? (
         <div className="space-y-1.5">
           {/* Bento hero: 1 large + 4 small */}
           <div className="grid grid-cols-3 grid-rows-2 gap-1.5 h-[360px] sm:h-[420px] rounded-2xl overflow-hidden">
             {/* Hero photo — spans 2 rows, 2 cols */}
-            <motion.button
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            <button
               className="col-span-2 row-span-2 relative overflow-hidden group cursor-pointer"
               onClick={() => setViewerIndex(0)}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
             >
               <Image
                 src={photos[0].url ?? ""}
                 alt={photos[0].file_name ?? "Photo"}
                 fill
-                className="object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                className="object-cover"
                 sizes="(max-width: 640px) 100vw, 66vw"
                 priority
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
-            </motion.button>
+            </button>
 
             {/* 4 smaller photos */}
             {photos.slice(1, 5).map((photo, i) => (
-              <motion.button
+              <button
                 key={photo.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.05 * (i + 1), duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                 className="relative overflow-hidden group cursor-pointer"
                 onClick={() => setViewerIndex(i + 1)}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
               >
                 <Image
                   src={photo.url ?? ""}
                   alt={photo.file_name ?? "Photo"}
                   fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+                  className="object-cover"
                   sizes="(max-width: 640px) 33vw, 20vw"
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
@@ -250,7 +242,7 @@ export function PhotoGrid({
                     <span className="text-white font-bold text-lg">+{photos.length - 5}</span>
                   </div>
                 )}
-              </motion.button>
+              </button>
             ))}
           </div>
 
@@ -258,30 +250,21 @@ export function PhotoGrid({
           {photos.length > 5 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 rounded-xl overflow-hidden">
               {photos.slice(5).map((photo, index) => (
-                <motion.button
+                <button
                   key={photo.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{
-                    delay: Math.min(index * 0.015, 0.2),
-                    duration: 0.4,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
                   onClick={() => setViewerIndex(index + 5)}
                   className="relative aspect-square overflow-hidden bg-muted/40 cursor-pointer group rounded-lg"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
                 >
                   <Image
                     src={photo.url ?? ""}
                     alt={photo.file_name ?? "Photo"}
                     fill
-                    className="object-cover transition-all duration-500 group-hover:brightness-110 group-hover:scale-[1.03]"
+                    className="object-cover"
                     sizes="(max-width: 640px) 50vw, 33vw"
                     loading="lazy"
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
-                </motion.button>
+                </button>
               ))}
             </div>
           )}
@@ -290,45 +273,36 @@ export function PhotoGrid({
         /* Standard grid for fewer photos */
         <div className={`grid ${columns === 2 ? "grid-cols-2" : columns === 4 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"} gap-1.5 rounded-2xl overflow-hidden`}>
           {photos.map((photo, index) => (
-            <motion.button
+            <button
               key={photo.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{
-                delay: Math.min(index * 0.015, 0.2),
-                duration: 0.4,
-                ease: [0.22, 1, 0.36, 1],
-              }}
               onClick={() => setViewerIndex(index)}
               className="relative aspect-square overflow-hidden bg-muted/40 cursor-pointer group rounded-lg"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
             >
               <Image
                 src={photo.url ?? ""}
                 alt={photo.file_name ?? "Photo"}
                 fill
-                className="object-cover transition-all duration-500 group-hover:brightness-110 group-hover:scale-[1.03]"
+                className="object-cover"
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 loading="lazy"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
-            </motion.button>
+            </button>
           ))}
         </div>
       )}
+      </div>
 
-      {viewerIndex !== null && (
-        <PhotoViewer
-          photos={photos}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerIndex(null)}
-          canDeletePhoto={canDeletePhoto}
-          onDeletePhoto={onDeletePhoto}
-          folderLink={folderLink}
-          runLink={runLink}
-        />
-      )}
+      <PhotoViewer
+        open={viewerIndex !== null}
+        photos={photos}
+        initialIndex={viewerIndex ?? 0}
+        onClose={() => setViewerIndex(null)}
+        canDeletePhoto={canDeletePhoto}
+        onDeletePhoto={onDeletePhoto}
+        folderLink={folderLink}
+        runLink={runLink}
+      />
     </>
   );
 }
@@ -352,17 +326,9 @@ function SimpleGrid({
   return (
     <div className={`grid ${columns === 2 ? "grid-cols-2" : columns === 4 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"} gap-1.5 rounded-2xl overflow-hidden`}>
       {photos.map((photo, index) => (
-        <motion.div
+        <div
           key={photo.id}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{
-            delay: Math.min(index * 0.015, 0.2),
-            duration: 0.4,
-            ease: [0.22, 1, 0.36, 1],
-          }}
           className="relative aspect-square overflow-hidden bg-muted/40 group rounded-lg"
-          whileHover={{ scale: 1.02 }}
         >
           <button
             onClick={() => onSelect(flatOffset + index)}
@@ -372,7 +338,7 @@ function SimpleGrid({
               src={photo.url ?? ""}
               alt={photo.file_name ?? "Photo"}
               fill
-              className="object-cover transition-all duration-500 group-hover:brightness-110 group-hover:scale-[1.03]"
+              className="object-cover"
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               loading="lazy"
             />
@@ -391,7 +357,7 @@ function SimpleGrid({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
-        </motion.div>
+        </div>
       ))}
     </div>
   );

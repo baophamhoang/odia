@@ -405,21 +405,20 @@ function VerticalTimeline({ nodes, isUploadTab }: VerticalTimelineProps) {
       </div>
 
       <AnimatePresence>
-        {viewer && (
-          <PhotoViewer
-            photos={viewer.photos}
-            initialIndex={viewer.index}
-            onClose={() => setViewer(null)}
-            folderLink={viewer.folderLink}
-            runLink={viewer.runLink}
-            canDeletePhoto={viewer.canDelete ? () => true : undefined}
-            onDeletePhoto={viewer.canDelete ? async (photo) => {
-              setViewer(null);
-              await deletePhoto(photo.id);
-              await swrMutate("/api/users/me/photos");
-            } : undefined}
-          />
-        )}
+        <PhotoViewer
+          open={!!viewer}
+          photos={viewer?.photos ?? []}
+          initialIndex={viewer?.index ?? 0}
+          onClose={() => setViewer(null)}
+          folderLink={viewer?.folderLink}
+          runLink={viewer?.runLink}
+          canDeletePhoto={viewer?.canDelete ? () => true : undefined}
+          onDeletePhoto={viewer?.canDelete ? async (photo) => {
+            setViewer(null);
+            await deletePhoto(photo.id);
+            await swrMutate("/api/users/me/photos");
+          } : undefined}
+        />
       </AnimatePresence>
     </>
   );

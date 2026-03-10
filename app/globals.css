@@ -122,9 +122,19 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Reserve scrollbar space so YARL's body overflow:hidden doesn't shift layout */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
+}
+
+/* Promote YARL overlay to its own compositor layer so its fade animation
+   doesn't force the photo grid to repaint */
+.yarl__root {
+  will-change: opacity;
 }
 
 /* Premium animations */

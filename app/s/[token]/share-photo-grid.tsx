@@ -10,7 +10,7 @@ export function SharePhotoGrid({ photos }: { photos: Photo[] }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3${viewerIndex !== null ? " pointer-events-none" : ""}`} style={viewerIndex !== null ? { transform: 'translateZ(0)' } : undefined}>
         {photos.map((photo, i) => (
           <button
             key={photo.id}
@@ -21,21 +21,20 @@ export function SharePhotoGrid({ photos }: { photos: Photo[] }) {
               src={photo.url ?? ""}
               alt={photo.file_name ?? ""}
               fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
+              className="object-cover"
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               loading={i < 8 ? "eager" : "lazy"}
             />
           </button>
         ))}
       </div>
-      {viewerIndex !== null && (
-        <PhotoViewer
-          photos={photos}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerIndex(null)}
-          runLink={null}
-        />
-      )}
+      <PhotoViewer
+        open={viewerIndex !== null}
+        photos={photos}
+        initialIndex={viewerIndex ?? 0}
+        onClose={() => setViewerIndex(null)}
+        runLink={null}
+      />
     </>
   );
 }
