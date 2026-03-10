@@ -15,6 +15,7 @@ import {
   Plus,
   Camera,
   ChevronsDown,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -40,6 +41,7 @@ import { PhotoGrid } from "@/components/photo-grid";
 import { UploadModal } from "@/components/upload-modal";
 import { deletePhoto } from "@/app/actions/photos";
 import { deleteRun } from "@/app/actions/runs";
+import { createShareToken } from "@/app/actions/vault";
 import { useTeamMembers } from "@/app/lib/api";
 import type { RunWithDetails } from "@/app/lib/types";
 import type { KeyedMutator } from "swr";
@@ -73,6 +75,7 @@ export function RunDetail({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showEndNudge, setShowEndNudge] = useState(false);
   const { data: members } = useTeamMembers();
@@ -102,6 +105,21 @@ export function RunDetail({
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
+    }
+  }
+
+  async function handleShare() {
+    if (!run.folder_id) return;
+    setIsSharing(true);
+    try {
+      const token = await createShareToken(run.folder_id);
+      const url = `${window.location.origin}/s/${token}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied to clipboard!");
+    } catch {
+      toast.error("Failed to create share link");
+    } finally {
+      setIsSharing(false);
     }
   }
 
@@ -293,6 +311,22 @@ export function RunDetail({
             <Plus className="h-4 w-4 mr-1.5" />
             Add Photos
           </Button>
+
+          {run.folder_id && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleShare}
+              disabled={isSharing}
+            >
+              {isSharing ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <Globe className="h-4 w-4 mr-1.5" />
+              )}
+              Share
+            </Button>
+          )}
 
           {run.photos.length > 0 && (
             <Button
