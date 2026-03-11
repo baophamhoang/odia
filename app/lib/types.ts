@@ -47,6 +47,7 @@ export interface Photo {
   uploaded_by: string;
   created_at: string;
   url?: string; // signed URL, generated on demand
+  thumb_url?: string; // pre-generated thumbnail URL
   uploader?: {
     id: string;
     name: string | null;

@@ -16,11 +16,12 @@ import type { RunCard, RunWithDetails, Photo, User } from "@/app/lib/types";
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function attachSignedUrls(photos: Photo[]): Promise<Photo[]> {
+async function attachSignedUrls(photos: (Photo & { thumb_path?: string | null })[]) {
   return Promise.all(
     photos.map(async (photo) => ({
       ...photo,
       url: await getDownloadUrl(photo.storage_path),
+      thumb_url: photo.thumb_path ? await getDownloadUrl(photo.thumb_path) : undefined,
     }))
   );
 }
@@ -111,13 +112,14 @@ export async function getRuns(page: number = 1): Promise<RunCard[]> {
         id: photo.id,
         run_id: photo.runId,
         storage_path: photo.storagePath,
+        thumb_path: photo.thumbPath,
         file_name: photo.fileName,
         file_size: photo.fileSize,
         mime_type: photo.mimeType,
         display_order: photo.displayOrder,
         uploaded_by: photo.uploadedBy,
         created_at: photo.createdAt,
-      } as Photo);
+      } as Photo & { thumb_path?: string | null });
       previewPhotosByRun.set(photo.runId, existing);
     }
   }
@@ -190,6 +192,7 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
         runId: photosTable.runId,
         folderId: photosTable.folderId,
         storagePath: photosTable.storagePath,
+        thumbPath: photosTable.thumbPath,
         fileName: photosTable.fileName,
         fileSize: photosTable.fileSize,
         mimeType: photosTable.mimeType,
@@ -219,6 +222,7 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
     run_id: p.runId,
     folder_id: p.folderId,
     storage_path: p.storagePath,
+    thumb_path: p.thumbPath,
     file_name: p.fileName,
     file_size: p.fileSize,
     mime_type: p.mimeType,
@@ -226,7 +230,7 @@ export async function getRun(runId: string): Promise<RunWithDetails | null> {
     uploaded_by: p.uploadedBy,
     created_at: p.createdAt,
     uploader: p.uploader,
-  }) as unknown as Photo));
+  }) as unknown as Photo & { thumb_path?: string | null }));
 
   return {
     id: run.id,

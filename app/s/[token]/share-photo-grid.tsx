@@ -18,7 +18,7 @@ export function SharePhotoGrid({ photos }: { photos: Photo[] }) {
             className="relative aspect-square rounded-xl overflow-hidden bg-muted/40 group"
           >
             <Image
-              src={photo.url ?? ""}
+              src={photo.thumb_url ?? photo.url ?? ""}
               alt={photo.file_name ?? ""}
               fill
               className="object-cover"
