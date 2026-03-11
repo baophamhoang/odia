@@ -18,6 +18,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { folder } = data;
   const title = `${folder.name} — Odia`;
   const description = `${data.photos.length} photo${data.photos.length !== 1 ? "s" : ""} from ${folder.name}`;
+  const baseUrl = process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "https://odia.1ohana.club";
+  const ogImageUrl = `${baseUrl}/s/${token}/opengraph-image`;
 
   return {
     title,
@@ -25,13 +27,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     openGraph: {
       title,
       description,
-      images: [{ url: `/s/${token}/opengraph-image` }],
+      images: [{ url: ogImageUrl, width: 1200, height: 630, type: "image/png" }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [`/s/${token}/opengraph-image`],
+      images: [ogImageUrl],
     },
   };
 }
