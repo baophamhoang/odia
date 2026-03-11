@@ -1,5 +1,8 @@
 import { ImageResponse } from "next/og";
-import { getFolderByShareToken } from "@/app/actions/vault";
+import { db } from "@/app/lib/db";
+import { folders as foldersTable, photos as photosTable } from "@/app/lib/schema";
+import { eq } from "drizzle-orm";
+import { getDownloadUrl } from "@/app/lib/r2";
 
 export const runtime = "nodejs";
 export const contentType = "image/png";
@@ -24,9 +27,12 @@ async function fetchImageAsDataUrl(url: string): Promise<string | null> {
 
 export default async function OgImage({ params }: Props) {
   const { token } = await params;
-  const data = await getFolderByShareToken(token);
 
-  if (!data) {
+  const folder = await db.query.folders.findFirst({
+    where: eq(foldersTable.shareToken, token),
+  });
+
+  if (!folder) {
     return new ImageResponse(
       (
         <div
@@ -49,13 +55,21 @@ export default async function OgImage({ params }: Props) {
     );
   }
 
-  const { folder, photos } = data;
+  const rawPhotos = await db
+    .select()
+    .from(photosTable)
+    .where(eq(photosTable.folderId, folder.id))
+    .orderBy(photosTable.displayOrder)
+    .limit(4);
 
-  // Fetch up to 4 photos as data URLs for embedding
-  const photoUrls = await Promise.all(
-    photos.slice(0, 4).map((p) => fetchImageAsDataUrl(p.url ?? ""))
-  );
-  const validUrls = photoUrls.filter(Boolean) as string[];
+  const validUrls = (
+    await Promise.all(
+      rawPhotos.map(async (p) => {
+        const url = await getDownloadUrl(p.thumbPath ?? p.storagePath);
+        return fetchImageAsDataUrl(url);
+      })
+    )
+  ).filter(Boolean) as string[];
 
   return new ImageResponse(
     (
@@ -80,6 +94,7 @@ export default async function OgImage({ params }: Props) {
         >
           <div
             style={{
+              display: "flex",
               fontSize: 52,
               fontWeight: 800,
               color: "#fafafa",
@@ -89,8 +104,8 @@ export default async function OgImage({ params }: Props) {
           >
             {folder.name}
           </div>
-          <div style={{ fontSize: 22, color: "#71717a", marginTop: 10 }}>
-            {photos.length} photo{photos.length !== 1 ? "s" : ""}
+          <div style={{ display: "flex", fontSize: 22, color: "#71717a", marginTop: 10 }}>
+            {`${rawPhotos.length} photo${rawPhotos.length !== 1 ? "s" : ""}`}
           </div>
         </div>
 
@@ -107,6 +122,7 @@ export default async function OgImage({ params }: Props) {
               <div
                 key={i}
                 style={{
+                  display: "flex",
                   flex: 1,
                   borderRadius: "16px",
                   overflow: "hidden",

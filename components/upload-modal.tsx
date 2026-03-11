@@ -24,6 +24,28 @@ import { createRun } from "@/app/actions/runs";
 import { useSimpleRuns } from "@/app/lib/api";
 import type { User } from "@/app/lib/types";
 
+async function generateThumbnail(file: File, maxWidth = 400): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new globalThis.Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
+        "image/jpeg",
+        0.75,
+      );
+    };
+    img.onerror = reject;
+    img.src = objectUrl;
+  });
+}
+
 interface UploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -179,6 +201,15 @@ export function UploadModal({
             xhr.setRequestHeader("Content-Type", file.type);
             xhr.send(file);
           });
+
+          // Upload thumbnail in parallel (fire-and-forget on error)
+          generateThumbnail(file).then((thumbBlob) =>
+            fetch(slot.thumbUploadUrl, {
+              method: "PUT",
+              headers: { "Content-Type": "image/jpeg" },
+              body: thumbBlob,
+            })
+          ).catch(() => {/* thumb failure is non-fatal */});
         }
       });
 

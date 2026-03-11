@@ -376,6 +376,7 @@ export async function getFolderContents(
         runId: photosTable.runId,
         folderId: photosTable.folderId,
         storagePath: photosTable.storagePath,
+        thumbPath: photosTable.thumbPath,
         fileName: photosTable.fileName,
         fileSize: photosTable.fileSize,
         mimeType: photosTable.mimeType,
@@ -435,6 +436,7 @@ export async function getFolderContents(
       created_at: photo.createdAt,
       uploader: photo.uploader,
       url: await getDownloadUrl(photo.storagePath),
+      thumb_url: photo.thumbPath ? await getDownloadUrl(photo.thumbPath) : undefined,
     } as unknown as Photo))
   );
 
@@ -576,6 +578,7 @@ export async function getRecentCustomFolderPhotos(): Promise<{
           uploaded_by: p.uploadedBy,
           created_at: p.createdAt,
           url: await getDownloadUrl(p.storagePath),
+          thumb_url: p.thumbPath ? await getDownloadUrl(p.thumbPath) : undefined,
         } as Photo))
       );
 
@@ -731,6 +734,7 @@ export async function getFolderByShareToken(token: string): Promise<{
       uploaded_by: p.uploadedBy,
       created_at: p.createdAt ?? "",
       url: await getDownloadUrl(p.storagePath),
+      thumb_url: p.thumbPath ? await getDownloadUrl(p.thumbPath) : undefined,
     } as Photo))
   );
 

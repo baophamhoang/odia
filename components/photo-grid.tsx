@@ -211,7 +211,7 @@ export function PhotoGrid({
               onClick={() => setViewerIndex(0)}
             >
               <Image
-                src={photos[0].url ?? ""}
+                src={photos[0].thumb_url ?? photos[0].url ?? ""}
                 alt={photos[0].file_name ?? "Photo"}
                 fill
                 className="object-cover"
@@ -229,7 +229,7 @@ export function PhotoGrid({
                 onClick={() => setViewerIndex(i + 1)}
               >
                 <Image
-                  src={photo.url ?? ""}
+                  src={photo.thumb_url ?? photo.url ?? ""}
                   alt={photo.file_name ?? "Photo"}
                   fill
                   className="object-cover"
@@ -256,7 +256,7 @@ export function PhotoGrid({
                   className="relative aspect-square overflow-hidden bg-muted/40 cursor-pointer group rounded-lg"
                 >
                   <Image
-                    src={photo.url ?? ""}
+                    src={photo.thumb_url ?? photo.url ?? ""}
                     alt={photo.file_name ?? "Photo"}
                     fill
                     className="object-cover"
@@ -279,7 +279,7 @@ export function PhotoGrid({
               className="relative aspect-square overflow-hidden bg-muted/40 cursor-pointer group rounded-lg"
             >
               <Image
-                src={photo.url ?? ""}
+                src={photo.thumb_url ?? photo.url ?? ""}
                 alt={photo.file_name ?? "Photo"}
                 fill
                 className="object-cover"
@@ -335,7 +335,7 @@ function SimpleGrid({
             className="absolute inset-0 cursor-pointer"
           >
             <Image
-              src={photo.url ?? ""}
+              src={photo.thumb_url ?? photo.url ?? ""}
               alt={photo.file_name ?? "Photo"}
               fill
               className="object-cover"

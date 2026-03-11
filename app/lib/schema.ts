@@ -81,6 +81,7 @@ export const photos = sqliteTable("photos", {
   fileName: text("file_name"),
   fileSize: integer("file_size"),
   mimeType: text("mime_type"),
+  thumbPath: text("thumb_path"),
   displayOrder: integer("display_order").default(0),
   uploadedBy: text("uploaded_by").notNull().references(() => users.id),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`),
