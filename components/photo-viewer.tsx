@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import Lightbox from "yet-another-react-lightbox";
 import Download from "yet-another-react-lightbox/plugins/download";
 import "yet-another-react-lightbox/styles.css";
@@ -8,6 +8,29 @@ import { FolderOpen, Footprints, Link2, Trash2, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Photo } from "@/app/lib/types";
+import type { RenderSlideProps } from "yet-another-react-lightbox";
+
+/** Shows thumbnail immediately, fades in full-res when loaded. */
+function ProgressiveSlide({ src, thumbSrc, alt }: { src: string; thumbSrc: string; alt: string }) {
+  const [fullLoaded, setFullLoaded] = useState(false);
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={thumbSrc}
+        alt=""
+        style={{ position: "absolute", maxWidth: "100%", maxHeight: "100%", objectFit: "contain", opacity: fullLoaded ? 0 : 1, transition: "opacity 0.25s ease" }}
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        onLoad={() => setFullLoaded(true)}
+        style={{ position: "absolute", maxWidth: "100%", maxHeight: "100%", objectFit: "contain", opacity: fullLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
+      />
+    </div>
+  );
+}
 
 interface PhotoViewerProps {
   open: boolean;
@@ -45,10 +68,18 @@ export function PhotoViewer({
   const slides = useMemo(
     () => photos.map((p) => ({
       src: p.url ?? "",
+      thumbSrc: p.thumb_url,
+      alt: p.file_name ?? "",
       download: { url: p.url ?? "", filename: p.file_name ?? p.id },
     })),
     [photos],
   );
+
+  const renderSlide = useCallback(({ slide }: RenderSlideProps) => {
+    const s = slide as typeof slides[number];
+    if (!s.thumbSrc || s.thumbSrc === s.src) return undefined;
+    return <ProgressiveSlide src={s.src} thumbSrc={s.thumbSrc} alt={s.alt} />;
+  }, []);
 
   function handleCopyLink() {
     if (!photo?.url) return;
@@ -139,6 +170,7 @@ export function PhotoViewer({
         animation={{ fade: 150, swipe: 250 }}
         plugins={[Download]}
         toolbar={{ buttons: toolbarButtons }}
+        render={{ slide: renderSlide }}
         styles={{ container: { backgroundColor: "rgba(0,0,0,0.85)" } }}
       />
 
