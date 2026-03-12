@@ -2,9 +2,8 @@
 
 import { useState, useRef, useMemo, useCallback } from "react";
 import Lightbox from "yet-another-react-lightbox";
-import Download from "yet-another-react-lightbox/plugins/download";
 import "yet-another-react-lightbox/styles.css";
-import { FolderOpen, Footprints, Link2, Trash2, Loader2 } from "lucide-react";
+import { FolderOpen, Footprints, Link2, Trash2, Loader2, Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Photo } from "@/app/lib/types";
@@ -70,7 +69,6 @@ export function PhotoViewer({
       src: p.url ?? "",
       thumbSrc: p.thumb_url,
       alt: p.file_name ?? "",
-      download: { url: p.url ?? "", filename: p.file_name ?? p.id },
     })),
     [photos],
   );
@@ -81,10 +79,31 @@ export function PhotoViewer({
     return <ProgressiveSlide src={s.src} thumbSrc={s.thumbSrc} alt={s.alt} />;
   }, []);
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
   function handleCopyLink() {
     if (!photo?.url) return;
     navigator.clipboard.writeText(photo.url);
     toast.success("Link copied!");
+  }
+
+  async function handleDownload() {
+    if (!photo?.url || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const res = await fetch(photo.url);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = photo.file_name ?? `photo-${photo.id}`;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      toast.error("Download failed");
+    } finally {
+      setIsDownloading(false);
+    }
   }
 
   async function handleDelete() {
@@ -99,6 +118,16 @@ export function PhotoViewer({
   }
 
   const toolbarButtons: React.ReactNode[] = [
+    <button
+      key="download"
+      type="button"
+      className="yarl__button"
+      onClick={() => { void handleDownload(); }}
+      disabled={isDownloading}
+      title="Download"
+    >
+      {isDownloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+    </button>,
     <button
       key="copy-link"
       type="button"
@@ -168,7 +197,6 @@ export function PhotoViewer({
         index={currentIndex}
         on={{ view: ({ index }) => setCurrentIndex(index) }}
         animation={{ fade: 150, swipe: 250 }}
-        plugins={[Download]}
         toolbar={{ buttons: toolbarButtons }}
         render={{ slide: renderSlide }}
         styles={{ container: { backgroundColor: "rgba(0,0,0,0.85)" } }}
