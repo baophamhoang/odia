@@ -91,16 +91,12 @@ export function PhotoViewer({
     if (!photo?.url || isDownloading) return;
     setIsDownloading(true);
     try {
-      const res = await fetch(photo.url);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = objectUrl;
+      a.href = `/api/download?id=${photo.id}`;
       a.download = photo.file_name ?? `photo-${photo.id}`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(objectUrl);
-    } catch {
-      toast.error("Download failed");
+      document.body.removeChild(a);
     } finally {
       setIsDownloading(false);
     }
