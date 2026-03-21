@@ -51,7 +51,7 @@ export async function requestUploadUrls(
 
       const [uploadUrl, thumbUploadUrl] = await Promise.all([
         getUploadUrl(storagePath, file.type),
-        getUploadUrl(thumbPath, "image/jpeg"),
+        getUploadUrl(thumbPath, 'image/jpeg', 3600),
       ]);
 
       return {
