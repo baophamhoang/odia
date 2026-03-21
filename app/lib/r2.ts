@@ -26,14 +26,15 @@ const BUCKET = process.env.R2_BUCKET_NAME;
 
 export async function getUploadUrl(
   storagePath: string,
-  contentType: string
+  contentType: string,
+  expiresIn = 120,
 ): Promise<string> {
   const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: storagePath,
     ContentType: contentType,
   });
-  return getSignedUrl(r2, command, { expiresIn: 120 });
+  return getSignedUrl(r2, command, { expiresIn });
 }
 
 export async function getDownloadUrl(storagePath: string): Promise<string> {

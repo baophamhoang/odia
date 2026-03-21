@@ -28,8 +28,30 @@ interface FolderToolbarProps {
   onFolderDeleted?: () => void;
 }
 
+async function generateThumbnail(file: File, maxWidth = 400): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new globalThis.Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
+        "image/jpeg",
+        0.75,
+      );
+    };
+    img.onerror = reject;
+    img.src = objectUrl;
+  });
+}
+
 async function uploadWithConcurrency(
-  slots: { uploadUrl: string; photoId: string }[],
+  slots: { uploadUrl: string; thumbUploadUrl: string; photoId: string }[],
   files: File[],
   limit = 5
 ) {
@@ -44,6 +66,16 @@ async function uploadWithConcurrency(
           body: files[idx],
           headers: { "Content-Type": files[idx].type },
         });
+        // Upload thumbnail after original (fire-and-forget on error)
+        generateThumbnail(files[idx])
+          .then((blob) =>
+            fetch(slots[idx].thumbUploadUrl, {
+              method: "PUT",
+              headers: { "Content-Type": "image/jpeg" },
+              body: blob,
+            })
+          )
+          .catch(() => {});
       }
     });
   await Promise.all(workers);
