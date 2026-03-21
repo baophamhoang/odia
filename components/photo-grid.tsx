@@ -206,43 +206,64 @@ export function PhotoGrid({
           {/* Bento hero: 1 large + 4 small */}
           <div className="grid grid-cols-3 grid-rows-2 gap-1.5 h-[360px] sm:h-[420px] rounded-2xl overflow-hidden">
             {/* Hero photo — spans 2 rows, 2 cols */}
-            <button
-              className="col-span-2 row-span-2 relative overflow-hidden group cursor-pointer"
-              onClick={() => setViewerIndex(0)}
-            >
-              <Image
-                src={photos[0].thumb_url ?? photos[0].url ?? ""}
-                alt={photos[0].file_name ?? "Photo"}
-                fill
-                className="object-cover"
-                sizes="(max-width: 640px) 100vw, 66vw"
-                priority
-              />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
-            </button>
+            <div className="col-span-2 row-span-2 relative overflow-hidden group">
+              <button
+                className="absolute inset-0 cursor-pointer"
+                onClick={() => setViewerIndex(0)}
+              >
+                <Image
+                  src={photos[0].thumb_url ?? photos[0].url ?? ""}
+                  alt={photos[0].file_name ?? "Photo"}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 640px) 100vw, 66vw"
+                  priority
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+              </button>
+              {canDeletePhoto?.(photos[0]) && (
+                <button
+                  className="absolute top-1.5 right-1.5 z-10 h-7 w-7 rounded-full bg-black/65 text-white/90 flex items-center justify-center hover:bg-red-600 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setPendingDelete(photos[0]); }}
+                  aria-label="Delete photo"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
 
             {/* 4 smaller photos */}
             {photos.slice(1, 5).map((photo, i) => (
-              <button
-                key={photo.id}
-                className="relative overflow-hidden group cursor-pointer"
-                onClick={() => setViewerIndex(i + 1)}
-              >
-                <Image
-                  src={photo.thumb_url ?? photo.url ?? ""}
-                  alt={photo.file_name ?? "Photo"}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 33vw, 20vw"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
-                {/* Last thumbnail: show "+N more" overlay */}
-                {i === 3 && photos.length > 5 && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">+{photos.length - 5}</span>
-                  </div>
+              <div key={photo.id} className="relative overflow-hidden group">
+                <button
+                  className="absolute inset-0 cursor-pointer"
+                  onClick={() => setViewerIndex(i + 1)}
+                >
+                  <Image
+                    src={photo.thumb_url ?? photo.url ?? ""}
+                    alt={photo.file_name ?? "Photo"}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 640px) 33vw, 20vw"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+                  {/* Last thumbnail: show "+N more" overlay */}
+                  {i === 3 && photos.length > 5 && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <span className="text-white font-bold text-lg">+{photos.length - 5}</span>
+                    </div>
+                  )}
+                </button>
+                {canDeletePhoto?.(photo) && (
+                  <button
+                    className="absolute top-1.5 right-1.5 z-10 h-7 w-7 rounded-full bg-black/65 text-white/90 flex items-center justify-center hover:bg-red-600 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); setPendingDelete(photo); }}
+                    aria-label="Delete photo"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 )}
-              </button>
+              </div>
             ))}
           </div>
 
@@ -250,21 +271,31 @@ export function PhotoGrid({
           {photos.length > 5 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 rounded-xl overflow-hidden">
               {photos.slice(5).map((photo, index) => (
-                <button
-                  key={photo.id}
-                  onClick={() => setViewerIndex(index + 5)}
-                  className="relative aspect-square overflow-hidden bg-muted/40 cursor-pointer group rounded-lg"
-                >
-                  <Image
-                    src={photo.thumb_url ?? photo.url ?? ""}
-                    alt={photo.file_name ?? "Photo"}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 640px) 50vw, 33vw"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
-                </button>
+                <div key={photo.id} className="relative aspect-square overflow-hidden bg-muted/40 group rounded-lg">
+                  <button
+                    onClick={() => setViewerIndex(index + 5)}
+                    className="absolute inset-0 cursor-pointer"
+                  >
+                    <Image
+                      src={photo.thumb_url ?? photo.url ?? ""}
+                      alt={photo.file_name ?? "Photo"}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 640px) 50vw, 33vw"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+                  </button>
+                  {canDeletePhoto?.(photo) && (
+                    <button
+                      className="absolute top-1.5 right-1.5 z-10 h-7 w-7 rounded-full bg-black/65 text-white/90 flex items-center justify-center hover:bg-red-600 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); setPendingDelete(photo); }}
+                      aria-label="Delete photo"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -273,21 +304,31 @@ export function PhotoGrid({
         /* Standard grid for fewer photos */
         <div className={`grid ${columns === 2 ? "grid-cols-2" : columns === 4 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"} gap-1.5 rounded-2xl overflow-hidden`}>
           {photos.map((photo, index) => (
-            <button
-              key={photo.id}
-              onClick={() => setViewerIndex(index)}
-              className="relative aspect-square overflow-hidden bg-muted/40 cursor-pointer group rounded-lg"
-            >
-              <Image
-                src={photo.thumb_url ?? photo.url ?? ""}
-                alt={photo.file_name ?? "Photo"}
-                fill
-                className="object-cover"
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
-            </button>
+            <div key={photo.id} className="relative aspect-square overflow-hidden bg-muted/40 group rounded-lg">
+              <button
+                onClick={() => setViewerIndex(index)}
+                className="absolute inset-0 cursor-pointer"
+              >
+                <Image
+                  src={photo.thumb_url ?? photo.url ?? ""}
+                  alt={photo.file_name ?? "Photo"}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+              </button>
+              {canDeletePhoto?.(photo) && (
+                <button
+                  className="absolute top-1.5 right-1.5 z-10 h-7 w-7 rounded-full bg-black/65 text-white/90 flex items-center justify-center hover:bg-red-600 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setPendingDelete(photo); }}
+                  aria-label="Delete photo"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -303,6 +344,47 @@ export function PhotoGrid({
         folderLink={folderLink}
         runLink={runLink}
       />
+
+      <Dialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingFromGrid) setPendingDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete photo?</DialogTitle>
+            <DialogDescription>
+              This photo will be removed permanently. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPendingDelete(null)}
+              disabled={isDeletingFromGrid}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!pendingDelete || !onDeletePhoto) return;
+                setIsDeletingFromGrid(true);
+                try {
+                  await onDeletePhoto(pendingDelete);
+                  setPendingDelete(null);
+                } finally {
+                  setIsDeletingFromGrid(false);
+                }
+              }}
+              disabled={isDeletingFromGrid}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

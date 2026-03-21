@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
 import { FolderOpen, Footprints, Link2, Trash2, Loader2, Download } from "lucide-react";
@@ -108,6 +109,7 @@ export function PhotoViewer({
     try {
       await onDeletePhoto(photo);
       setShowDeleteConfirm(false);
+      onClose();
     } finally {
       setIsDeleting(false);
     }
@@ -198,10 +200,10 @@ export function PhotoViewer({
         styles={{ container: { backgroundColor: "rgba(0,0,0,0.85)" } }}
       />
 
-      {/* Delete confirmation modal */}
-      {showDeleteConfirm && (
+      {/* Delete confirmation — portaled directly to body so it renders above yarl */}
+      {showDeleteConfirm && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/55"
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/55"
           onClick={() => { if (!isDeleting) setShowDeleteConfirm(false); }}
         >
           <div
@@ -230,7 +232,8 @@ export function PhotoViewer({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
