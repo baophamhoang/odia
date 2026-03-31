@@ -116,4 +116,4 @@ const spec = {
   },
 };
 
-export const GET = ApiReference({ spec: { content: spec } });
+export const GET = ApiReference({ content: spec });
