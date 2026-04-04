@@ -11,6 +11,16 @@ import { getUploadUrl, deleteObject, getDownloadUrl } from "@/app/lib/r2";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // requestUploadUrls
 // ---------------------------------------------------------------------------
 
@@ -22,46 +32,40 @@ export async function requestUploadUrls(
 
   const userId = session.user.id;
 
-  const results = await Promise.all(
-    files.map(async (file) => {
-      const photoId = randomUUID();
-      const ext = path.extname(file.name).toLowerCase().replace(/^\./, "");
-      const storagePath = `runs/pending/${photoId}${ext ? `.${ext}` : ""}`;
-      const thumbPath = `thumbs/${photoId}.jpeg`;
+  // Build all records in memory first
+  const records = files.map((file) => {
+    const photoId = randomUUID();
+    const ext = path.extname(file.name).toLowerCase().replace(/^\./, "");
+    return {
+      id: photoId,
+      runId: null as null,
+      storagePath: `runs/pending/${photoId}${ext ? `.${ext}` : ""}`,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+      thumbPath: `thumbs/${photoId}.jpeg`,
+      displayOrder: 0,
+      uploadedBy: userId,
+    };
+  });
 
-      // Insert pending photo row
-      const [photo] = await db
-        .insert(photosTable)
-        .values({
-          id: photoId,
-          runId: null,
-          storagePath: storagePath,
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type,
-          thumbPath: thumbPath,
-          displayOrder: 0,
-          uploadedBy: userId,
-        })
-        .returning({ id: photosTable.id });
+  // Single bulk insert — one Turso round-trip regardless of file count
+  await db.insert(photosTable).values(records);
 
-      if (!photo) {
-        throw new Error(`Failed to create photo record for "${file.name}"`);
-      }
-
-      const [uploadUrl, thumbUploadUrl] = await Promise.all([
-        getUploadUrl(storagePath, file.type),
-        getUploadUrl(thumbPath, 'image/jpeg', 3600),
-      ]);
-
-      return {
-        photoId: photo.id,
-        uploadUrl,
-        storagePath,
-        thumbUploadUrl,
-      };
-    })
-  );
+  // Generate presigned URLs in batches of 10 to avoid overwhelming R2
+  const results: { photoId: string; uploadUrl: string; storagePath: string; thumbUploadUrl: string }[] = [];
+  for (const batch of chunk(records, 10)) {
+    const batchResults = await Promise.all(
+      batch.map(async (r) => {
+        const [uploadUrl, thumbUploadUrl] = await Promise.all([
+          getUploadUrl(r.storagePath, r.mimeType),
+          getUploadUrl(r.thumbPath, "image/jpeg", 3600),
+        ]);
+        return { photoId: r.id, uploadUrl, storagePath: r.storagePath, thumbUploadUrl };
+      })
+    );
+    results.push(...batchResults);
+  }
 
   return results;
 }
@@ -93,19 +97,21 @@ export async function addPhotosToRun(
   const { getRunFolderId } = await import("@/app/actions/vault");
   const folderId = await getRunFolderId(runId);
 
-  // Update each photo to link to the run (and folder) with sequential display_order
-  await Promise.all(
-    photoIds.map(async (photoId, i) => {
-      await db
-        .update(photosTable)
-        .set({
-          runId: runId,
-          displayOrder: maxOrder + i + 1,
-          folderId: folderId,
-        })
-        .where(eq(photosTable.id, photoId));
-    })
-  );
+  // Update photos in batches of 10 to avoid overwhelming Turso with concurrent queries
+  const batches = chunk(photoIds, 10);
+  let offset = 0;
+  for (const batch of batches) {
+    const batchOffset = offset;
+    await Promise.all(
+      batch.map((photoId, i) =>
+        db
+          .update(photosTable)
+          .set({ runId, displayOrder: maxOrder + batchOffset + i + 1, folderId })
+          .where(eq(photosTable.id, photoId))
+      )
+    );
+    offset += batch.length;
+  }
 }
 
 // ---------------------------------------------------------------------------
