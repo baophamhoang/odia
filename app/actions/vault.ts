@@ -719,7 +719,6 @@ export async function getFolderByShareToken(token: string): Promise<{
     .from(photosTable)
     .where(eq(photosTable.folderId, folder.id))
     .orderBy(photosTable.displayOrder)
-    .limit(50);
 
   const photos: Photo[] = await Promise.all(
     rawPhotos.map(async (p) => ({
