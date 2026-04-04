@@ -59,12 +59,11 @@ export default async function OgImage({ params }: Props) {
     .select()
     .from(photosTable)
     .where(eq(photosTable.folderId, folder.id))
-    .orderBy(photosTable.displayOrder)
-    .limit(4);
+    .orderBy(photosTable.displayOrder);
 
   const validUrls = (
     await Promise.all(
-      rawPhotos.map(async (p) => {
+      rawPhotos.slice(0, 4).map(async (p) => {
         const url = await getDownloadUrl(p.thumbPath ?? p.storagePath);
         return fetchImageAsDataUrl(url);
       })
