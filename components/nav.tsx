@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { motion } from "motion/react";
-import { Images, CalendarDays, User, Shield, LogOut, Sun, Moon } from "lucide-react";
+import { Images, CalendarDays, User, Shield, LogOut, Sun, Moon, Bug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -95,6 +95,21 @@ export function Nav() {
         </nav>
 
         <div className="w-px h-5 bg-border/50 mx-1" />
+
+        {/* Bug report */}
+        <button
+          data-tally-open="b5rgZ0"
+          data-tally-layout="modal"
+          data-tally-width="700"
+          data-tally-auto-close="3000"
+          className="group relative flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-all duration-200"
+          aria-label="Report a bug"
+        >
+          <Bug className="h-4 w-4" />
+          <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] text-background opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            Report a bug?
+          </span>
+        </button>
 
         {/* Theme toggle */}
         <button
