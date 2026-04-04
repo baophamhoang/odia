@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { requestUploadUrls } from "@/app/actions/photos";
+import { useUploadProgress } from "@/app/lib/upload-progress-context";
 import type { FolderType } from "@/app/lib/types";
 
 interface FolderToolbarProps {
@@ -53,9 +54,11 @@ async function generateThumbnail(file: File, maxWidth = 400): Promise<Blob> {
 async function uploadWithConcurrency(
   slots: { uploadUrl: string; thumbUploadUrl: string; photoId: string }[],
   files: File[],
+  onProgress?: (uploaded: number, total: number) => void,
   limit = 5
 ) {
   let i = 0;
+  let uploaded = 0;
   const workers = Array(Math.min(limit, slots.length))
     .fill(null)
     .map(async () => {
@@ -66,6 +69,8 @@ async function uploadWithConcurrency(
           body: files[idx],
           headers: { "Content-Type": files[idx].type },
         });
+        uploaded++;
+        onProgress?.(uploaded, files.length);
         // Upload thumbnail after original (fire-and-forget on error)
         generateThumbnail(files[idx])
           .then((blob) =>
@@ -90,6 +95,7 @@ export function FolderToolbar({
   onPhotosUploaded,
   onFolderDeleted,
 }: FolderToolbarProps) {
+  const { setProgress, clearProgress } = useUploadProgress();
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -157,6 +163,7 @@ export function FolderToolbar({
     if (fileList.length === 0) return;
     const files = Array.from(fileList);
     setUploading(true);
+    setProgress(0, files.length);
     try {
       const fileInfos = files.map((f) => ({
         name: f.name,
@@ -165,7 +172,9 @@ export function FolderToolbar({
       }));
       const uploadSlots = await requestUploadUrls(fileInfos);
 
-      await uploadWithConcurrency(uploadSlots, files);
+      await uploadWithConcurrency(uploadSlots, files, (uploaded, total) =>
+        setProgress(uploaded, total)
+      );
 
       const photoIds = uploadSlots.map((s) => s.photoId);
       await fetch(`/api/vault/folders/${folderId}/upload`, {
@@ -179,6 +188,7 @@ export function FolderToolbar({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
       console.error("Upload error:", e);
+      clearProgress();
     } finally {
       setUploading(false);
     }

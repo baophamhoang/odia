@@ -22,6 +22,7 @@ import { MemberChips } from "@/components/member-chips";
 import { requestUploadUrls, addPhotosToRun } from "@/app/actions/photos";
 import { createRun } from "@/app/actions/runs";
 import { useSimpleRuns } from "@/app/lib/api";
+import { useUploadProgress } from "@/app/lib/upload-progress-context";
 import type { User } from "@/app/lib/types";
 
 async function generateThumbnail(file: File, maxWidth = 400): Promise<Blob> {
@@ -73,6 +74,7 @@ export function UploadModal({
   preSelectedRunId,
 }: UploadModalProps) {
   const router = useRouter();
+  const { setProgress, clearProgress } = useUploadProgress();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<FilePreview[]>([]);
   const [mode, setMode] = useState<"create" | "add-to-existing">(initialMode);
@@ -182,11 +184,14 @@ export function UploadModal({
 
             xhr.addEventListener("load", () => {
               if (xhr.status >= 200 && xhr.status < 300) {
-                setFiles((prev) =>
-                  prev.map((f, i) =>
+                setFiles((prev) => {
+                  const next = prev.map((f, i) =>
                     i === index ? { ...f, uploaded: true, progress: 100 } : f
-                  )
-                );
+                  );
+                  const uploadedCount = next.filter((f) => f.uploaded).length;
+                  setProgress(uploadedCount, next.length);
+                  return next;
+                });
                 resolve();
               } else {
                 reject(new Error(`Upload failed for ${file.name}`));
@@ -221,6 +226,7 @@ export function UploadModal({
     if (files.length === 0) return;
 
     setIsUploading(true);
+    setProgress(0, files.length);
     try {
       const photoIds = await uploadFiles();
 
@@ -278,6 +284,7 @@ export function UploadModal({
       toast.error(
         error instanceof Error ? error.message : "Upload failed"
       );
+      clearProgress();
     } finally {
       setIsUploading(false);
     }
