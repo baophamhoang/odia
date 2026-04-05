@@ -211,6 +211,16 @@ export function Nav() {
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end">
             <DropdownMenuItem
+              data-tally-open="b5rgZ0"
+              data-tally-layout="modal"
+              data-tally-width="700"
+              data-tally-auto-close="3000"
+            >
+              <Bug className="h-4 w-4 mr-2" />
+              Report a bug
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
               <Sun className="h-4 w-4 mr-2 hidden dark:block" />
