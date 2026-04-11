@@ -219,7 +219,7 @@ export function FolderToolbar({
           ) : (
             <Upload className="h-4 w-4" />
           )}
-          {uploading ? "Uploading..." : "Upload Photos"}
+          {uploading ? "Uploading..." : "Upload"}
         </Button>
 
         <Button

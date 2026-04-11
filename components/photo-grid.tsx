@@ -122,8 +122,8 @@ export function PhotoGrid({
           </motion.div>
         </div>
         <div className="text-center">
-          <p className="text-sm font-semibold text-muted-foreground/40">No photos in this run</p>
-          <p className="text-xs text-muted-foreground/25 mt-1">Photos will appear here after upload</p>
+          <p className="text-sm font-semibold text-muted-foreground/40">No media in this run</p>
+          <p className="text-xs text-muted-foreground/25 mt-1">Photos and videos will appear here after upload</p>
         </div>
       </div>
     );

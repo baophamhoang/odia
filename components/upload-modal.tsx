@@ -316,7 +316,7 @@ export function UploadModal({
     }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background/95 backdrop-blur-2xl">
         <DialogHeader>
-          <DialogTitle>Upload Photos</DialogTitle>
+          <DialogTitle>Upload Photos & Videos</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
@@ -485,7 +485,7 @@ export function UploadModal({
                   <Upload className="h-6 w-6 text-primary/60" />
                 </motion.div>
                 <div className="text-center">
-                  <p className="font-semibold text-foreground/80">Drop your run photos</p>
+                  <p className="font-semibold text-foreground/80">Drop your run photos & videos</p>
                   <p className="text-xs text-muted-foreground/50 mt-1">or click to browse</p>
                 </div>
                 <div className="flex items-center gap-2 mt-2">

@@ -140,13 +140,13 @@ export function VaultView({
             </motion.div>
 
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground/90">
-              Drop photos here
+              Drop photos & videos here
             </h2>
             <p className="mt-3 text-sm text-muted-foreground/70 max-w-sm leading-relaxed">
-              Drag your run photos anywhere on this page, or click to browse.
+              Drag your run photos & videos anywhere on this page, or click to browse.
             </p>
             <div className="mt-3 flex items-center gap-2">
-              {["JPG", "PNG", "WebP", "HEIC"].map((fmt) => (
+              {["JPG", "PNG", "WebP", "HEIC", "MP4", "MOV"].map((fmt) => (
                 <span
                   key={fmt}
                   className="text-[10px] font-medium text-muted-foreground/80 uppercase tracking-wider px-2.5 py-1 rounded-full bg-primary/5 border border-primary/10"
@@ -428,7 +428,7 @@ export function VaultView({
                 Your vault is waiting
               </h3>
               <p className="text-sm text-muted-foreground/70 mt-2 max-w-xs mx-auto leading-relaxed">
-                Every run has a story. Drop your photos above to start building your collection.
+                Every run has a story. Drop your photos & videos above to start building your collection.
               </p>
               <motion.div
                 animate={{ y: [0, -6, 0] }}
