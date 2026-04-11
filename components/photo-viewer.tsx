@@ -4,11 +4,12 @@ import { useState, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
+import Video from "yet-another-react-lightbox/plugins/video";
 import { FolderOpen, Footprints, Link2, Trash2, Loader2, Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Photo } from "@/app/lib/types";
-import type { RenderSlideProps } from "yet-another-react-lightbox";
+import type { RenderSlideProps, Slide } from "yet-another-react-lightbox";
 
 /** Shows thumbnail immediately, fades in full-res when loaded. */
 function ProgressiveSlide({ src, thumbSrc, alt }: { src: string; thumbSrc: string; alt: string }) {
@@ -66,16 +67,26 @@ export function PhotoViewer({
   const photo = photos[currentIndex];
 
   const slides = useMemo(
-    () => photos.map((p) => ({
-      src: p.url ?? "",
-      thumbSrc: p.thumb_url,
-      alt: p.file_name ?? "",
-    })),
+    () => photos.map((p) =>
+      p.mime_type?.startsWith("video/")
+        ? {
+            type: "video" as const,
+            sources: [
+              {
+                src: p.url ?? "",
+                type: p.mime_type === "video/quicktime" ? "video/mp4" : p.mime_type,
+              },
+            ],
+            poster: p.thumb_url ?? undefined,
+          }
+        : { src: p.url ?? "", thumbSrc: p.thumb_url, alt: p.file_name ?? "" }
+    ) as Slide[],
     [photos],
   );
 
   const renderSlide = useCallback(({ slide }: RenderSlideProps) => {
-    const s = slide as typeof slides[number];
+    if ((slide as { type?: string }).type === "video") return undefined;
+    const s = slide as { src: string; thumbSrc?: string | null; alt: string };
     if (!s.thumbSrc || s.thumbSrc === s.src) return undefined;
     return <ProgressiveSlide src={s.src} thumbSrc={s.thumbSrc} alt={s.alt} />;
   }, []);
@@ -196,6 +207,13 @@ export function PhotoViewer({
         on={{ view: ({ index }) => setCurrentIndex(index) }}
         animation={{ fade: 150, swipe: 250 }}
         toolbar={{ buttons: toolbarButtons }}
+        plugins={[Video]}
+        video={{
+          autoPlay: true,
+          controls: true,
+          muted: true,
+          playsInline: true,
+        }}
         render={{ slide: renderSlide }}
         styles={{ container: { backgroundColor: "rgba(0,0,0,0.85)" } }}
       />

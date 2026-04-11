@@ -516,7 +516,7 @@ export function MyPhotosContent({
             {uploadNodes.length === 0 ? (
               <EmptyState
                 message="No uploads yet"
-                sub="Drag photos or tap + to upload"
+                sub="Drag photos & videos or tap + to upload"
               />
             ) : (
               <motion.div

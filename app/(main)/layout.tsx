@@ -62,15 +62,17 @@ async function uploadToFolderDirectly(
           });
           uploaded++;
           onProgress(uploaded, files.length);
-          generateThumbnail(files[idx])
-            .then((blob) =>
-              fetch(slots[idx].thumbUploadUrl, {
-                method: "PUT",
-                headers: { "Content-Type": "image/jpeg" },
-                body: blob,
-              })
-            )
-            .catch(() => {});
+          if (slots[idx].thumbUploadUrl && files[idx].type.startsWith("image/")) {
+            generateThumbnail(files[idx])
+              .then((blob) =>
+                fetch(slots[idx].thumbUploadUrl!, {
+                  method: "PUT",
+                  headers: { "Content-Type": "image/jpeg" },
+                  body: blob,
+                })
+              )
+              .catch(() => {});
+          }
         }
       })
   );
@@ -139,7 +141,7 @@ export default function MainLayout({
   }, []);
 
   const handlePhotoInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith("image/"));
+    const selected = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
     e.target.value = "";
     if (selected.length === 0) return;
 
@@ -187,7 +189,7 @@ export default function MainLayout({
           <input
             ref={photoInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             className="hidden"
             onChange={handlePhotoInputChange}

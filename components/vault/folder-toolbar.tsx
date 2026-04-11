@@ -52,7 +52,7 @@ async function generateThumbnail(file: File, maxWidth = 400): Promise<Blob> {
 }
 
 async function uploadWithConcurrency(
-  slots: { uploadUrl: string; thumbUploadUrl: string; photoId: string }[],
+  slots: { uploadUrl: string; thumbUploadUrl: string | null; photoId: string }[],
   files: File[],
   onProgress?: (uploaded: number, total: number) => void,
   limit = 5
@@ -72,15 +72,17 @@ async function uploadWithConcurrency(
         uploaded++;
         onProgress?.(uploaded, files.length);
         // Upload thumbnail after original (fire-and-forget on error)
-        generateThumbnail(files[idx])
-          .then((blob) =>
-            fetch(slots[idx].thumbUploadUrl, {
-              method: "PUT",
-              headers: { "Content-Type": "image/jpeg" },
-              body: blob,
-            })
-          )
-          .catch(() => {});
+        if (slots[idx].thumbUploadUrl && files[idx].type.startsWith("image/")) {
+          generateThumbnail(files[idx])
+            .then((blob) =>
+              fetch(slots[idx].thumbUploadUrl!, {
+                method: "PUT",
+                headers: { "Content-Type": "image/jpeg" },
+                body: blob,
+              })
+            )
+            .catch(() => {});
+        }
       }
     });
   await Promise.all(workers);
@@ -217,7 +219,7 @@ export function FolderToolbar({
           ) : (
             <Upload className="h-4 w-4" />
           )}
-          {uploading ? "Uploading..." : "Upload Photos"}
+          {uploading ? "Uploading..." : "Upload"}
         </Button>
 
         <Button
@@ -267,7 +269,7 @@ export function FolderToolbar({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           className="hidden"
           onChange={(e) => {

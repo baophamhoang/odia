@@ -26,7 +26,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 export async function requestUploadUrls(
   files: { name: string; type: string; size: number }[]
-): Promise<{ photoId: string; uploadUrl: string; storagePath: string; thumbUploadUrl: string }[]> {
+): Promise<{ photoId: string; uploadUrl: string; storagePath: string; thumbUploadUrl: string | null }[]> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -36,6 +36,7 @@ export async function requestUploadUrls(
   const records = files.map((file) => {
     const photoId = randomUUID();
     const ext = path.extname(file.name).toLowerCase().replace(/^\./, "");
+    const isImage = file.type.startsWith("image/");
     return {
       id: photoId,
       runId: null as null,
@@ -43,7 +44,7 @@ export async function requestUploadUrls(
       fileName: file.name,
       fileSize: file.size,
       mimeType: file.type,
-      thumbPath: `thumbs/${photoId}.jpeg`,
+      thumbPath: isImage ? `thumbs/${photoId}.jpeg` : null,
       displayOrder: 0,
       uploadedBy: userId,
     };
@@ -53,13 +54,13 @@ export async function requestUploadUrls(
   await db.insert(photosTable).values(records);
 
   // Generate presigned URLs in batches of 10 to avoid overwhelming R2
-  const results: { photoId: string; uploadUrl: string; storagePath: string; thumbUploadUrl: string }[] = [];
+  const results: { photoId: string; uploadUrl: string; storagePath: string; thumbUploadUrl: string | null }[] = [];
   for (const batch of chunk(records, 10)) {
     const batchResults = await Promise.all(
       batch.map(async (r) => {
         const [uploadUrl, thumbUploadUrl] = await Promise.all([
           getUploadUrl(r.storagePath, r.mimeType),
-          getUploadUrl(r.thumbPath, "image/jpeg", 3600),
+          r.thumbPath ? getUploadUrl(r.thumbPath, "image/jpeg", 3600) : Promise.resolve(null),
         ]);
         return { photoId: r.id, uploadUrl, storagePath: r.storagePath, thumbUploadUrl };
       })

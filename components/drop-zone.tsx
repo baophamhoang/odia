@@ -45,7 +45,7 @@ export function DropZone({ onDrop, children }: DropZoneProps) {
       setDragCounter(0);
 
       const files = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-        f.type.startsWith("image/")
+        f.type.startsWith("image/") || f.type.startsWith("video/")
       );
       if (files.length > 0) {
         onDrop(files);
@@ -108,7 +108,7 @@ export function DropZone({ onDrop, children }: DropZoneProps) {
                   Drop to upload
                 </p>
                 <p className="text-sm text-white/30 mt-1.5">
-                  JPG, PNG, WebP, HEIC
+                  JPG, PNG, WebP, HEIC, MP4, MOV
                 </p>
               </div>
             </motion.div>
