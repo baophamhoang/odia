@@ -2,12 +2,20 @@
 
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { motion } from "motion/react";
 import { APP_NAME, CLUB_NAME } from "@/app/lib/constants";
 
+function isInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|MicroMessenger|Line\/|Twitter\/|TikTok|Snapchat|Pinterest/i.test(ua);
+}
+
 function LoginCard() {
   const searchParams = useSearchParams();
+  const [inAppBrowser] = useState(() => isInAppBrowser());
+
   const error = searchParams.get("error");
   const isAccessDenied =
     error === "AccessDenied" ||
@@ -51,9 +59,25 @@ function LoginCard() {
             </motion.div>
           )}
 
+          {inAppBrowser && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm text-amber-700 dark:text-amber-400 text-left space-y-2"
+              role="alert"
+            >
+              <p className="font-semibold">Open in your browser to sign in</p>
+              <p className="text-xs opacity-80">
+                Google blocks sign-in from in-app browsers (Messenger, Instagram, etc.).
+                Tap the <span className="font-medium">⋯ menu</span> and choose <span className="font-medium">&ldquo;Open in browser&rdquo;</span>.
+              </p>
+            </motion.div>
+          )}
+
           <button
             onClick={() => signIn("google", { callbackUrl: searchParams.get("redirectTo") || "/vault" })}
-            className="group relative inline-flex w-full items-center justify-center gap-3 rounded-full border border-border/50 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] backdrop-blur-xl text-foreground px-6 py-4 text-sm font-semibold transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/30 active:scale-[0.98]"
+            disabled={inAppBrowser}
+            className="group relative inline-flex w-full items-center justify-center gap-3 rounded-full border border-border/50 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] backdrop-blur-xl text-foreground px-6 py-4 text-sm font-semibold transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/30 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
