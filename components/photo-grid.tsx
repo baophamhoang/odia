@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import type { Photo } from "@/app/lib/types";
 import { PhotoViewer } from "@/components/photo-viewer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Camera, Trash2 } from "lucide-react";
+import { Camera, Play, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,40 @@ interface PhotoGridProps {
   onDeletePhoto?: (photo: Photo) => Promise<void>;
   folderLink?: string | null;
   runLink?: string | null;
+}
+
+function isVideo(photo: Photo) {
+  return photo.mime_type?.startsWith("video/") ?? false;
+}
+
+function MediaTile({ photo, className, sizes }: { photo: Photo; className?: string; sizes?: string }) {
+  if (isVideo(photo)) {
+    return (
+      <>
+        <video
+          src={photo.url ?? ""}
+          className={className ?? "absolute inset-0 h-full w-full object-cover"}
+          muted
+          playsInline
+          preload="metadata"
+        />
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="rounded-full bg-black/50 p-2">
+            <Play className="h-4 w-4 fill-white text-white" />
+          </div>
+        </div>
+      </>
+    );
+  }
+  return (
+    <Image
+      src={photo.thumb_url ?? photo.url ?? ""}
+      alt={photo.file_name ?? "Photo"}
+      fill
+      className={className ?? "object-cover"}
+      sizes={sizes}
+    />
+  );
 }
 
 /** Group photos by uploader, preserving order of first appearance. */
@@ -211,14 +245,7 @@ export function PhotoGrid({
                 className="absolute inset-0 cursor-pointer"
                 onClick={() => setViewerIndex(0)}
               >
-                <Image
-                  src={photos[0].thumb_url ?? photos[0].url ?? ""}
-                  alt={photos[0].file_name ?? "Photo"}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 100vw, 66vw"
-                  priority
-                />
+                <MediaTile photo={photos[0]} sizes="(max-width: 640px) 100vw, 66vw" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
               </button>
               {canDeletePhoto?.(photos[0]) && (
@@ -239,13 +266,7 @@ export function PhotoGrid({
                   className="absolute inset-0 cursor-pointer"
                   onClick={() => setViewerIndex(i + 1)}
                 >
-                  <Image
-                    src={photo.thumb_url ?? photo.url ?? ""}
-                    alt={photo.file_name ?? "Photo"}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 640px) 33vw, 20vw"
-                  />
+                  <MediaTile photo={photo} sizes="(max-width: 640px) 33vw, 20vw" />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
                   {/* Last thumbnail: show "+N more" overlay */}
                   {i === 3 && photos.length > 5 && (
@@ -276,14 +297,7 @@ export function PhotoGrid({
                     onClick={() => setViewerIndex(index + 5)}
                     className="absolute inset-0 cursor-pointer"
                   >
-                    <Image
-                      src={photo.thumb_url ?? photo.url ?? ""}
-                      alt={photo.file_name ?? "Photo"}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 640px) 50vw, 33vw"
-                      loading="lazy"
-                    />
+                    <MediaTile photo={photo} sizes="(max-width: 640px) 50vw, 33vw" />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
                   </button>
                   {canDeletePhoto?.(photo) && (
@@ -309,14 +323,7 @@ export function PhotoGrid({
                 onClick={() => setViewerIndex(index)}
                 className="absolute inset-0 cursor-pointer"
               >
-                <Image
-                  src={photo.thumb_url ?? photo.url ?? ""}
-                  alt={photo.file_name ?? "Photo"}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                  loading="lazy"
-                />
+                <MediaTile photo={photo} sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
               </button>
               {canDeletePhoto?.(photo) && (
@@ -416,14 +423,7 @@ function SimpleGrid({
             onClick={() => onSelect(flatOffset + index)}
             className="absolute inset-0 cursor-pointer"
           >
-            <Image
-              src={photo.thumb_url ?? photo.url ?? ""}
-              alt={photo.file_name ?? "Photo"}
-              fill
-              className="object-cover"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              loading="lazy"
-            />
+            <MediaTile photo={photo} sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
           </button>
 

@@ -43,7 +43,7 @@ export function VaultView({
       e.preventDefault();
       setIsDragOver(false);
       const files = Array.from(e.dataTransfer.files).filter((f) =>
-        f.type.startsWith("image/")
+        f.type.startsWith("image/") || f.type.startsWith("video/")
       );
       if (files.length > 0) {
         const dt = new DataTransfer();

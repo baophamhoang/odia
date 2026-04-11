@@ -120,7 +120,7 @@ export function UploadModal({
   }, [files]);
 
   const addFiles = useCallback((newFiles: File[]) => {
-    const imageFiles = newFiles.filter((f) => f.type.startsWith("image/"));
+    const imageFiles = newFiles.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
     const previews = imageFiles.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
@@ -207,14 +207,16 @@ export function UploadModal({
             xhr.send(file);
           });
 
-          // Upload thumbnail in parallel (fire-and-forget on error)
-          generateThumbnail(file).then((thumbBlob) =>
-            fetch(slot.thumbUploadUrl, {
-              method: "PUT",
-              headers: { "Content-Type": "image/jpeg" },
-              body: thumbBlob,
-            })
-          ).catch(() => {/* thumb failure is non-fatal */});
+          // Upload thumbnail for images only (fire-and-forget)
+          if (slot.thumbUploadUrl && file.type.startsWith("image/")) {
+            generateThumbnail(file).then((thumbBlob) =>
+              fetch(slot.thumbUploadUrl!, {
+                method: "PUT",
+                headers: { "Content-Type": "image/jpeg" },
+                body: thumbBlob,
+              })
+            ).catch(() => {});
+          }
         }
       });
 
@@ -398,13 +400,32 @@ export function UploadModal({
                     transition={{ type: "spring", stiffness: 400, damping: 20, delay: index * 0.03 }}
                     className="relative aspect-square rounded-xl overflow-hidden bg-muted"
                   >
-                    <Image
-                      src={f.preview}
-                      alt={f.file.name}
-                      fill
-                      className="object-cover"
-                      sizes="150px"
-                    />
+                    {f.file.type.startsWith("video/") ? (
+                      <>
+                        <video
+                          src={f.preview}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="rounded-full bg-black/50 p-1.5">
+                            <svg viewBox="0 0 12 12" className="h-3 w-3 fill-white">
+                              <polygon points="3,1 11,6 3,11" />
+                            </svg>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <Image
+                        src={f.preview}
+                        alt={f.file.name}
+                        fill
+                        className="object-cover"
+                        sizes="150px"
+                      />
+                    )}
                     {/* Upload progress ring */}
                     {isUploading && !f.uploaded && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
@@ -481,7 +502,7 @@ export function UploadModal({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,video/*"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -493,7 +514,7 @@ export function UploadModal({
             {/* iOS camera shortcut — shown only on touch devices */}
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,video/*"
               capture="environment"
               className="hidden"
               id="camera-capture-input"
